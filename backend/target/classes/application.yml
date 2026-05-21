@@ -1,0 +1,35 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/familytree}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:0002}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:dGhpcy1pcy1hLXNlY3JldC1rZXktZm9yLWZhbWlseS10cmVlLWFwcGxpY2F0aW9uLXdoaWNoLWlzLWF0LWxlYXN0LTI1Ni1iaXRzLWxvbmc=}
+    expiration-ms: 86400000
+
+  upload:
+    dir: ${UPLOAD_DIR:./uploads}
+
+server:
+  port: 8080

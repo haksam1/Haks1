@@ -1,0 +1,37 @@
+package com.familytree.dto.response;
+
+import com.familytree.model.Relationship.RelationshipType;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import java.time.LocalDate;
+import java.util.List;
+
+@Data
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+public class PersonResponse {
+    private Long id;
+    private Long treeId;
+    private String firstName;
+    private String lastName;
+    private LocalDate birthDate;
+    private LocalDate deathDate;
+    private String gender;
+    private String bio;
+    private String photoUrl;
+    private String phoneNumber;
+    private List<RelationshipDto> relationships;
+
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class RelationshipDto {
+        private Long id;
+        private Long relatedPersonId;
+        private RelationshipType type;
+    }
+}

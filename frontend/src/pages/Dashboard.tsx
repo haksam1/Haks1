@@ -1,0 +1,505 @@
+import React, { useState } from 'react';
+import { useTrees } from '../hooks/useTrees';
+import { Link } from 'react-router-dom';
+import {
+  Plus, TreePine, Trash2, Calendar, ArrowRight,
+  Users, Search, X, Leaf, GitBranch
+} from 'lucide-react';
+import { isAxiosError } from 'axios';
+
+const getCreateTreeErrorMessage = (error: unknown) => {
+  if (isAxiosError(error)) {
+    if (!error.response) return 'Could not reach the server. Make sure the backend is running.';
+    if (error.response.status === 401) return 'Session expired. Please sign in again.';
+    const message = error.response.data?.message;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  return 'Unable to create the family. Please try again.';
+};
+
+const dashboardBackgroundImage = '/images/d34bb4775f0b3a5d53edac6dcb4b8377.jpg';
+
+const Dashboard: React.FC = () => {
+  const { useList, create, delete: deleteTree } = useTrees();
+  const { data: trees, isLoading } = useList();
+  const [newName, setNewName] = useState('');
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const treeName = newName.trim();
+    if (!treeName) { setCreateError('Enter a family name first.'); return; }
+    setCreateError(null);
+    setIsCreating(true);
+    try {
+      await create(treeName);
+      setNewName('');
+    } catch (error) {
+      setCreateError(getCreateTreeErrorMessage(error));
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleDelete = async (id: number, name: string) => {
+    if (window.confirm(`Delete "${name}"? This cannot be undone.`)) {
+      setDeletingId(id);
+      await deleteTree(id);
+      setDeletingId(null);
+    }
+  };
+
+  const filteredTrees = trees?.filter((tree) =>
+    tree.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const stats = {
+    total: trees?.length || 0,
+    recent: trees?.filter((t) => {
+      const days = (Date.now() - new Date(t.createdAt).getTime()) / 86400000;
+      return days <= 7;
+    }).length || 0,
+  };
+
+  return (
+    <div
+      className="min-h-screen"
+      style={{
+        backgroundColor: '#f7f4ef',
+        fontFamily: "'DM Sans', system-ui, sans-serif",
+      }}
+    >
+
+      {/* ───── HERO ───── */}
+      <div
+        className="relative overflow-hidden"
+        style={{
+          backgroundColor: '#0d2218',
+          backgroundImage: `linear-gradient(rgba(13, 34, 24, 0.78), rgba(13, 34, 24, 0.86)), url(${dashboardBackgroundImage})`,
+          backgroundPosition: 'center 34%',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: 'cover',
+        }}
+      >
+        {/* Glowing orb */}
+        <div
+          className="pointer-events-none absolute -top-32 right-0 h-[500px] w-[500px] rounded-full opacity-20"
+          style={{ background: 'radial-gradient(circle, #2d6a4f 0%, transparent 70%)' }}
+        />
+
+        <div className="relative mx-auto max-w-6xl px-6 py-14">
+          <div className="mb-6 flex items-center gap-2">
+            <span
+              className="rounded-full px-3 py-1 text-xs font-semibold tracking-widest uppercase"
+              style={{ background: '#1a3a2a', color: '#95d5b2', letterSpacing: '0.12em' }}
+            >
+              Heritage Archive
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-8 md:flex-row md:items-end md:justify-between">
+            <div className="max-w-xl">
+              <h1
+                className="mb-4 text-5xl font-bold leading-tight tracking-tight text-white md:text-6xl"
+                style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+              >
+                Your Family <br />
+                <span style={{ color: '#95d5b2' }}>Legacy</span>
+              </h1>
+              <p className="text-lg leading-relaxed" style={{ color: '#a8b8a8' }}>
+                Preserve stories, trace lineages, and build an enduring record
+                of your family's history for generations to come.
+              </p>
+            </div>
+
+            {/* Stats */}
+            <div className="flex gap-4">
+              <div
+                className="rounded-2xl px-6 py-4 text-center"
+                style={{ background: '#1a3a2a', border: '1px solid #2d5040' }}
+              >
+                <p className="mb-0.5 text-3xl font-bold text-white">{stats.total}</p>
+                <p className="text-xs uppercase tracking-widest" style={{ color: '#6a9e80' }}>Families</p>
+              </div>
+              <div
+                className="rounded-2xl px-6 py-4 text-center"
+                style={{ background: '#1a3a2a', border: '1px solid #2d5040' }}
+              >
+                <p className="mb-0.5 text-3xl font-bold text-white">{stats.recent}</p>
+                <p className="text-xs uppercase tracking-widest" style={{ color: '#6a9e80' }}>This Week</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Decorative leaf strip */}
+          <div className="mt-10 flex items-center gap-3 opacity-20">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <Leaf
+                key={i}
+                size={10 + (i % 3) * 3}
+                className="text-[#95d5b2]"
+                style={{ transform: `rotate(${i * 29}deg)` }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          backgroundColor: '#f7f4ef',
+          backgroundImage: `linear-gradient(rgba(247, 244, 239, 0.78), rgba(247, 244, 239, 0.88)), url(${dashboardBackgroundImage})`,
+          backgroundPosition: 'center 45%',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: 'cover',
+        }}
+      >
+        {/* ───── ACTIONS BAR ───── */}
+        <div className="mx-auto max-w-6xl px-6">
+          <div
+            className="-mt-5 relative z-10 rounded-2xl p-4 shadow-xl"
+            style={{ background: '#ffffff', border: '1px solid #e8e0d0' }}
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              {/* Search */}
+              <div className="relative lg:w-72">
+                <Search
+                  size={16}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2"
+                  style={{ color: '#a09080' }}
+                />
+                <input
+                  type="text"
+                  placeholder="Search your families…"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none transition-all"
+                  style={{
+                    background: '#f7f4ef',
+                    border: '1.5px solid #e8e0d0',
+                    color: '#2d3a2a',
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = '#2d6a4f')}
+                  onBlur={(e) => (e.target.style.borderColor = '#e8e0d0')}
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2"
+                    style={{ color: '#a09080' }}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              {/* Create form */}
+              <form onSubmit={handleCreate} className="flex flex-1 gap-2 lg:justify-end">
+                <div className="relative flex-1 lg:max-w-xs">
+                  <TreePine
+                    size={15}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2"
+                    style={{ color: '#a09080' }}
+                  />
+                  <input
+                    type="text"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Name your new family…"
+                    className="w-full rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none transition-all"
+                    style={{
+                      background: '#f7f4ef',
+                      border: '1.5px solid #e8e0d0',
+                      color: '#2d3a2a',
+                    }}
+                    onFocus={(e) => (e.target.style.borderColor = '#2d6a4f')}
+                    onBlur={(e) => (e.target.style.borderColor = '#e8e0d0')}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isCreating}
+                  className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 disabled:opacity-60"
+                  style={{ background: '#1a3a2a' }}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = '#2d6a4f')}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = '#1a3a2a')}
+                >
+                  <Plus size={16} />
+                  <span>{isCreating ? 'Creating…' : 'New Family'}</span>
+                </button>
+              </form>
+            </div>
+
+            {createError && (
+              <div
+                className="mt-3 flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium"
+                style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}
+              >
+                <X size={15} />
+                {createError}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ───── TREES GRID ───── */}
+        <div className="mx-auto max-w-6xl px-6 py-10">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-24 gap-4">
+              <div className="relative h-14 w-14">
+                <div
+                  className="h-14 w-14 animate-spin rounded-full"
+                  style={{ border: '3px solid #e8e0d0', borderTopColor: '#2d6a4f' }}
+                />
+                <TreePine
+                  size={20}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+                  style={{ color: '#2d6a4f' }}
+                />
+              </div>
+              <p className="text-sm" style={{ color: '#a09080' }}>Loading your families…</p>
+            </div>
+          ) : filteredTrees && filteredTrees.length > 0 ? (
+            <>
+              <div className="mb-6 flex items-center justify-between">
+                <p className="text-sm" style={{ color: '#a09080' }}>
+                  {filteredTrees.length} {filteredTrees.length === 1 ? 'family' : 'families'}
+                  {searchTerm && ` matching "${searchTerm}"`}
+                </p>
+                <div className="flex items-center gap-1.5" style={{ color: '#a09080' }}>
+                  <GitBranch size={14} />
+                  <span className="text-xs">Sorted by date</span>
+                </div>
+              </div>
+
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredTrees.map((tree) => (
+                  <TreeCard
+                    key={tree.id}
+                    tree={tree}
+                    onDelete={() => handleDelete(tree.id, tree.name)}
+                    isDeleting={deletingId === tree.id}
+                  />
+                ))}
+
+                {/* "Add new" ghost card */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const input = document.querySelector<HTMLInputElement>('input[placeholder="Name your new family…"]');
+                    input?.focus();
+                  }}
+                  className="group flex flex-col items-center justify-center gap-3 rounded-2xl py-12 transition-all duration-300"
+                  style={{
+                    border: '2px dashed #d4c9b0',
+                    color: '#a09080',
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#2d6a4f';
+                    (e.currentTarget as HTMLButtonElement).style.color = '#2d6a4f';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#d4c9b0';
+                    (e.currentTarget as HTMLButtonElement).style.color = '#a09080';
+                  }}
+                >
+                  <div
+                    className="flex h-12 w-12 items-center justify-center rounded-2xl transition-all duration-300"
+                    style={{ background: '#f7f4ef' }}
+                  >
+                    <Plus size={20} />
+                  </div>
+                  <span className="text-sm font-medium">Add new family</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <EmptyState searchTerm={searchTerm} />
+          )}
+        </div>
+
+        {/* ───── FOOTER TIPS ───── */}
+        {trees && trees.length > 0 && (
+          <div className="mt-6 border-t" style={{ borderColor: '#e8e0d0', background: '#f0ece4' }}>
+            <div className="mx-auto max-w-6xl px-6 py-5">
+              <div className="flex flex-wrap items-center justify-center gap-8 text-xs" style={{ color: '#a09080' }}>
+                {[
+                  { dot: '#2d6a4f', text: 'Click any family to start exploring' },
+                  { dot: '#6a9e80', text: 'Add members and document relationships' },
+                  { dot: '#95d5b2', text: 'Share your heritage with family' },
+                ].map(({ dot, text }) => (
+                  <span key={text} className="flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: dot }} />
+                    {text}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ───── FAMILY CARD ───── */
+type TreeCardProps = {
+  tree: { id: number; name: string; createdAt: string };
+  onDelete: () => void;
+  isDeleting: boolean;
+};
+
+const TreeCard: React.FC<TreeCardProps> = ({ tree, onDelete, isDeleting }) => {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      className="group relative flex flex-col overflow-hidden rounded-2xl transition-all duration-400"
+      style={{
+        background: '#ffffff',
+        border: '1px solid #e8e0d0',
+        boxShadow: hovered ? '0 20px 40px -12px rgba(13,34,24,0.15)' : '0 1px 3px rgba(0,0,0,0.04)',
+        transform: hovered ? 'translateY(-3px)' : 'translateY(0)',
+        transition: 'box-shadow 0.3s ease, transform 0.3s ease',
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Top color band */}
+      <div
+        className="h-1 w-full transition-all duration-500"
+        style={{
+          background: hovered
+            ? 'linear-gradient(90deg, #2d6a4f, #95d5b2)'
+            : 'linear-gradient(90deg, #1a3a2a, #2d6a4f)',
+        }}
+      />
+
+      <div className="flex flex-1 flex-col p-6">
+        {/* Icon */}
+        <div
+          className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl transition-all duration-300"
+          style={{
+            background: hovered ? '#e8f5ee' : '#f0f7f2',
+          }}
+        >
+          <TreePine size={22} style={{ color: '#2d6a4f' }} />
+        </div>
+
+        {/* Name */}
+        <h3
+          className="mb-2 text-xl font-bold leading-snug transition-colors duration-200"
+          style={{
+            color: hovered ? '#1a3a2a' : '#2d3a2a',
+            fontFamily: "'Playfair Display', Georgia, serif",
+          }}
+        >
+          {tree.name}
+        </h3>
+
+        {/* Meta */}
+        <div className="mb-5 space-y-1.5">
+          <p className="flex items-center gap-2 text-xs" style={{ color: '#a09080' }}>
+            <Calendar size={12} />
+            Created{' '}
+            {new Date(tree.createdAt).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })}
+          </p>
+          <p className="flex items-center gap-2 text-xs" style={{ color: '#a09080' }}>
+            <Users size={12} />
+            0 members · Growing
+          </p>
+        </div>
+
+        {/* Divider */}
+        <div className="mt-auto pt-4" style={{ borderTop: '1px solid #f0ece4' }}>
+          <div className="flex items-center justify-between">
+            <Link
+              to={`/trees/${tree.id}`}
+              className="group/link flex items-center gap-1.5 text-sm font-semibold transition-all"
+              style={{ color: '#2d6a4f' }}
+            >
+              <span>Explore</span>
+              <ArrowRight size={14} className="transition-transform duration-200 group-hover/link:translate-x-1" />
+            </Link>
+
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={isDeleting}
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-200 disabled:opacity-50"
+              style={{ color: '#c8bfaa' }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.background = '#fef2f2';
+                (e.currentTarget as HTMLButtonElement).style.color = '#dc2626';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                (e.currentTarget as HTMLButtonElement).style.color = '#c8bfaa';
+              }}
+              title="Delete family"
+            >
+              {isDeleting ? (
+                <div
+                  className="h-3.5 w-3.5 animate-spin rounded-full"
+                  style={{ border: '2px solid #dc2626', borderTopColor: 'transparent' }}
+                />
+              ) : (
+                <Trash2 size={14} />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ───── EMPTY STATE ───── */
+const EmptyState: React.FC<{ searchTerm: string }> = ({ searchTerm }) => (
+  <div className="flex flex-col items-center justify-center py-20 text-center">
+    <div
+      className="mb-8 flex h-28 w-28 items-center justify-center rounded-full"
+      style={{ background: '#e8f5ee', border: '1px solid #c8e6d0' }}
+    >
+      <TreePine size={48} style={{ color: '#2d6a4f' }} />
+    </div>
+    <h3
+      className="mb-3 text-2xl font-bold"
+      style={{ color: '#1a3a2a', fontFamily: "'Playfair Display', Georgia, serif" }}
+    >
+      {searchTerm ? 'No families found' : 'Begin your journey'}
+    </h3>
+    <p className="mb-8 max-w-sm text-base leading-relaxed" style={{ color: '#a09080' }}>
+      {searchTerm
+        ? `No families match "${searchTerm}". Try a different name.`
+        : 'Create your first family to start preserving your heritage and connecting generations.'}
+    </p>
+    {!searchTerm && (
+      <button
+        type="button"
+        onClick={() =>
+          document
+            .querySelector<HTMLInputElement>('input[placeholder="Name your new family…"]')
+            ?.focus()
+        }
+        className="flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white transition-all duration-200"
+        style={{ background: '#1a3a2a' }}
+        onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = '#2d6a4f')}
+        onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = '#1a3a2a')}
+      >
+        <Plus size={16} />
+        Create your first family
+      </button>
+    )}
+  </div>
+);
+
+export default Dashboard;

@@ -1,0 +1,73 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< com.familytree:family-tree >---------------------
+[INFO] Building family-tree 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ family-tree ---
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] Copying 4 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ family-tree ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ family-tree ---
+[INFO] Copying 1 resource from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.11.0:testCompile (default-testCompile) @ family-tree ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- surefire:3.1.2:test (default-test) @ family-tree ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.familytree.FamilyTreeApplicationTests
+13:00:00.160 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.familytree.FamilyTreeApplicationTests]: FamilyTreeApplicationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+13:00:00.312 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.familytree.FamilyTreeApplication for test class com.familytree.FamilyTreeApplicationTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.5)
+
+2026-05-08T13:00:00.949Z  INFO 108679 --- [           main] c.familytree.FamilyTreeApplicationTests  : Starting FamilyTreeApplicationTests using Java 21.0.10 with PID 108679 (started by jules in /app/backend)
+2026-05-08T13:00:00.952Z  INFO 108679 --- [           main] c.familytree.FamilyTreeApplicationTests  : The following 1 profile is active: "test"
+2026-05-08T13:00:02.160Z  INFO 108679 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-08T13:00:02.287Z  INFO 108679 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 115 ms. Found 4 JPA repository interfaces.
+2026-05-08T13:00:03.061Z  INFO 108679 --- [           main] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-05-08T13:00:03.129Z  INFO 108679 --- [           main] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.4.4.Final
+2026-05-08T13:00:03.172Z  INFO 108679 --- [           main] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2026-05-08T13:00:03.504Z  INFO 108679 --- [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-08T13:00:03.539Z  INFO 108679 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-05-08T13:00:03.806Z  INFO 108679 --- [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:testdb user=SA
+2026-05-08T13:00:03.808Z  INFO 108679 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-05-08T13:00:03.841Z  WARN 108679 --- [           main] org.hibernate.orm.deprecation            : HHH90000025: H2Dialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-05-08T13:00:05.151Z  INFO 108679 --- [           main] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-08T13:00:05.240Z  INFO 108679 --- [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-08T13:00:05.979Z  INFO 108679 --- [           main] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-05-08T13:00:07.082Z  WARN 108679 --- [           main] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-05-08T13:00:07.555Z  INFO 108679 --- [           main] o.s.s.web.DefaultSecurityFilterChain     : Will secure any request with [org.springframework.security.web.session.DisableEncodeUrlFilter@470dbce9, org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter@64e5d7e4, org.springframework.security.web.context.SecurityContextHolderFilter@18fb1034, org.springframework.security.web.header.HeaderWriterFilter@5e57149f, org.springframework.web.filter.CorsFilter@604125bd, org.springframework.security.web.authentication.logout.LogoutFilter@72c9576a, com.familytree.security.JwtAuthFilter@7d12fb85, org.springframework.security.web.savedrequest.RequestCacheAwareFilter@78b5c29f, org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter@79b24f79, org.springframework.security.web.authentication.AnonymousAuthenticationFilter@39a4bd89, org.springframework.security.web.session.SessionManagementFilter@47585784, org.springframework.security.web.access.ExceptionTranslationFilter@47fa54d, org.springframework.security.web.access.intercept.AuthorizationFilter@4f8d98d4]
+2026-05-08T13:00:08.073Z  INFO 108679 --- [           main] c.familytree.FamilyTreeApplicationTests  : Started FamilyTreeApplicationTests in 7.562 seconds (process running for 8.944)
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A Java agent has been loaded dynamically (/home/jules/.m2/repository/net/bytebuddy/byte-buddy-agent/1.14.13/byte-buddy-agent-1.14.13.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.457 s -- in com.familytree.FamilyTreeApplicationTests
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  12.528 s
+[INFO] Finished at: 2026-05-08T13:00:09Z
+[INFO] ------------------------------------------------------------------------

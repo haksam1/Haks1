@@ -1,0 +1,6 @@
+CREATE TABLE family_trees (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(200) NOT NULL,
+    owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
