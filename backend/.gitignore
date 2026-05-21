@@ -1,0 +1,5 @@
+target/
+uploads/
+backend.log
+test_output.txt
+*.class
