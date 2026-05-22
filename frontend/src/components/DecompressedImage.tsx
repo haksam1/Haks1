@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { decompressGzipArrayBuffer } from '../lib/compression';
-import api from '../api/client';
+import api, { getApiResourceUrl } from '../api/client';
 import { User } from 'lucide-react';
 
 interface DecompressedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
@@ -17,41 +17,36 @@ const DecompressedImage: React.FC<DecompressedImageProps> = ({
   className,
   ...props
 }) => {
-  const [imgSrc, setImgSrc] = useState<string>('');
+  const [decompressedImage, setDecompressedImage] = useState<{ url: string; src: string } | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<boolean>(false);
+  const imageUrl = photoUrl ? getApiResourceUrl(photoUrl) : '';
+  const isCompressedImage = Boolean(photoUrl && !photoUrl.startsWith('data:') && photoUrl.toLowerCase().endsWith('.gz'));
 
   useEffect(() => {
-    if (!photoUrl) {
-      setImgSrc('');
-      return;
-    }
-
-    // If it's already a base64 string or is not a GZIP file URL
-    if (photoUrl.startsWith('data:')) {
-      setImgSrc(photoUrl);
-      return;
-    }
-
-    const fullUrl = photoUrl.startsWith('http') ? photoUrl : `http://localhost:8080${photoUrl}`;
-
-    // Return immediately if already cached
-    if (decompressedCache[fullUrl]) {
-      setImgSrc(decompressedCache[fullUrl]);
+    if (!photoUrl || !isCompressedImage) {
       return;
     }
 
     let active = true;
     const fetchImage = async () => {
-      setLoading(true);
+      const cachedSrc = decompressedCache[imageUrl];
+      setLoading(!cachedSrc);
       setError(false);
+
+      if (cachedSrc) {
+        setDecompressedImage({ url: imageUrl, src: cachedSrc });
+        setLoading(false);
+        return;
+      }
+
       try {
-        const response = await api.get(fullUrl, { responseType: 'arraybuffer' });
+        const response = await api.get(photoUrl, { responseType: 'arraybuffer' });
         const decompressed = await decompressGzipArrayBuffer(response.data);
         
         if (active) {
-          decompressedCache[fullUrl] = decompressed;
-          setImgSrc(decompressed);
+          decompressedCache[imageUrl] = decompressed;
+          setDecompressedImage({ url: imageUrl, src: decompressed });
         }
       } catch (err) {
         console.error('Failed to load or decompress image:', err);
@@ -70,9 +65,9 @@ const DecompressedImage: React.FC<DecompressedImageProps> = ({
     return () => {
       active = false;
     };
-  }, [photoUrl]);
+  }, [imageUrl, isCompressedImage, photoUrl]);
 
-  if (!photoUrl || error) {
+  if (!photoUrl || (isCompressedImage && error)) {
     return (
       <div className={`flex items-center justify-center bg-[#f7f4ef] text-[#a09080] ${className}`}>
         <User size={fallbackIconSize} />
@@ -80,7 +75,13 @@ const DecompressedImage: React.FC<DecompressedImageProps> = ({
     );
   }
 
-  if (loading) {
+  if (!isCompressedImage) {
+    return <img src={imageUrl} className={className} alt="" {...props} />;
+  }
+
+  const decompressedSrc = decompressedImage?.url === imageUrl ? decompressedImage.src : '';
+
+  if (loading || !decompressedSrc) {
     return (
       <div className={`flex items-center justify-center bg-[#f7f4ef]/50 animate-pulse ${className}`}>
         <div className="h-4 w-4 rounded-full border-2 border-[#2d6a4f] border-t-transparent animate-spin" />
@@ -88,7 +89,7 @@ const DecompressedImage: React.FC<DecompressedImageProps> = ({
     );
   }
 
-  return <img src={imgSrc} className={className} alt="" {...props} />;
+  return <img src={decompressedSrc} className={className} alt="" {...props} />;
 };
 
 export default DecompressedImage;

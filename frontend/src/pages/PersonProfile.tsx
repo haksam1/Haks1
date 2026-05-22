@@ -5,6 +5,8 @@ import { useUpload } from '../hooks/useUpload';
 import DecompressedImage from '../components/DecompressedImage';
 import { Calendar, Camera, Trash2, Edit2, ArrowLeft, Heart, Users, ScrollText } from 'lucide-react';
 
+const profileBackgroundImage = '/images/d34bb4775f0b3a5d53edac6dcb4b8377.jpg';
+
 const PersonProfile: React.FC = () => {
   const { treeId, personId } = useParams();
   const navigate = useNavigate();
@@ -92,7 +94,14 @@ const PersonProfile: React.FC = () => {
     });
 
     // Combine them with priority mapping
-    const relationMap = new Map<number, { personId: number; fullName: string; typeLabel: string }>();
+    const relationMap = new Map<number, {
+      personId: number;
+      fullName: string;
+      typeLabel: string;
+      photoUrl?: string;
+      birthDate?: string;
+      deathDate?: string;
+    }>();
     const getPersonDetails = (id: number) => allPersons.find(p => p.id === id);
 
     const addRelation = (id: number, label: string) => {
@@ -102,7 +111,14 @@ const PersonProfile: React.FC = () => {
       const fullName = `${relP.firstName} ${relP.lastName}`;
       const existing = relationMap.get(id);
       if (!existing) {
-        relationMap.set(id, { personId: id, fullName, typeLabel: label });
+        relationMap.set(id, {
+          personId: id,
+          fullName,
+          typeLabel: label,
+          photoUrl: relP.photoUrl,
+          birthDate: relP.birthDate,
+          deathDate: relP.deathDate,
+        });
       } else {
         const priority = (lbl: string) => {
           if (['Husband', 'Wife', 'Spouse'].includes(lbl)) return 5;
@@ -112,7 +128,14 @@ const PersonProfile: React.FC = () => {
           return 1; // Grandparents, grandchildren
         };
         if (priority(label) > priority(existing.typeLabel)) {
-          relationMap.set(id, { personId: id, fullName, typeLabel: label });
+          relationMap.set(id, {
+            personId: id,
+            fullName,
+            typeLabel: label,
+            photoUrl: relP.photoUrl,
+            birthDate: relP.birthDate,
+            deathDate: relP.deathDate,
+          });
         }
       }
     };
@@ -166,7 +189,7 @@ const PersonProfile: React.FC = () => {
 
   if (isLoading || !person) {
     return (
-      <div className="flex min-h-[calc(100vh-64px)] flex-col items-center justify-center space-y-4 bg-[#f7f4ef] md:min-h-screen">
+      <div className="flex min-h-screen flex-col items-center justify-center space-y-4 bg-[#f7f4ef]">
         <div
           className="h-10 w-10 animate-spin rounded-full"
           style={{ border: '3px solid #e8e0d0', borderTopColor: '#2d6a4f' }}
@@ -177,11 +200,19 @@ const PersonProfile: React.FC = () => {
   }
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-[#f7f4ef] px-6 py-10 md:min-h-screen" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-      <div className="mx-auto max-w-4xl space-y-6">
+    <div
+      className="min-h-screen bg-[#f7f4ef] px-4 py-6 sm:px-6 lg:px-8"
+      style={{
+        fontFamily: "'DM Sans', system-ui, sans-serif",
+        backgroundImage: `linear-gradient(rgba(247, 244, 239, 0.82), rgba(247, 244, 239, 0.92)), url(${profileBackgroundImage})`,
+        backgroundPosition: 'center 45%',
+        backgroundRepeat: 'no-repeat',
+        backgroundSize: 'cover',
+      }}
+    >
+      <div className="mx-auto max-w-6xl space-y-6">
         
-        {/* Back Button */}
-        <div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <button 
             onClick={() => navigate(`/trees/${treeId}`)}
             className="flex cursor-pointer items-center gap-2 text-sm font-bold transition-colors"
@@ -190,13 +221,29 @@ const PersonProfile: React.FC = () => {
             <ArrowLeft size={16} />
             <span>Back to Family</span>
           </button>
+
+          <Link to="/dashboard" className="flex items-center">
+            <img
+              src="/kincore_logo_v4.svg"
+              alt="KinCore logo"
+              className="h-14 w-40 shrink-0 object-contain"
+            />
+          </Link>
         </div>
 
         {/* Profile Card */}
         <div className="overflow-hidden rounded-2xl bg-white shadow-xl" style={{ border: '1px solid #e8e0d0' }}>
           
           {/* Header Banner */}
-          <div className="relative h-40 bg-[#0d2218]">
+          <div
+            className="relative h-56 bg-[#0d2218] sm:h-64"
+            style={{
+              backgroundImage: `linear-gradient(rgba(13, 34, 24, 0.72), rgba(13, 34, 24, 0.86)), url(${profileBackgroundImage})`,
+              backgroundPosition: 'center 34%',
+              backgroundRepeat: 'no-repeat',
+              backgroundSize: 'cover',
+            }}
+          >
             <div
               className="pointer-events-none absolute inset-0 opacity-[0.05]"
               style={{
@@ -204,8 +251,8 @@ const PersonProfile: React.FC = () => {
                 backgroundSize: '48px 48px',
               }}
             />
-            <div className="absolute -bottom-16 left-8">
-              <div className="group relative h-32 w-32 overflow-hidden rounded-2xl border-4 border-white bg-[#f7f4ef] shadow-md">
+            <div className="absolute -bottom-20 left-6 sm:left-8">
+              <div className="group relative h-40 w-40 overflow-hidden rounded-2xl border-4 border-white bg-[#f7f4ef] shadow-md">
                 <DecompressedImage photoUrl={person.photoUrl} fallbackIconSize={48} className="w-full h-full object-cover" />
                 <label className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center bg-black/50 text-white opacity-0 transition-all duration-300 group-hover:opacity-100">
                   <Camera size={24} />
@@ -217,11 +264,11 @@ const PersonProfile: React.FC = () => {
           </div>
 
           {/* Profile Details Container */}
-          <div className="pt-20 px-8 pb-8">
-            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-              <div>
+          <div className="px-6 pb-8 pt-24 sm:px-8">
+            <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
+              <div className="max-w-3xl">
                 <h1
-                  className="text-3xl font-bold tracking-tight"
+                  className="text-4xl font-bold tracking-tight sm:text-5xl"
                   style={{ color: '#1a3a2a', fontFamily: "'Playfair Display', Georgia, serif" }}
                 >
                   {person.firstName} {person.lastName}
@@ -261,9 +308,9 @@ const PersonProfile: React.FC = () => {
             </div>
 
             {/* Profile Grid (Bio & Relationships) */}
-            <div className="mt-10 grid gap-8 border-t pt-8 md:grid-cols-3" style={{ borderColor: '#f0ece4' }}>
+            <div className="mt-10 grid gap-8 border-t pt-8 lg:grid-cols-[minmax(0,2fr)_360px]" style={{ borderColor: '#f0ece4' }}>
               {/* Biography Section */}
-              <div className="md:col-span-2 space-y-4">
+              <div className="space-y-4">
                 <h3 className="flex items-center gap-2 text-lg font-bold" style={{ color: '#1a3a2a' }}>
                   <ScrollText size={18} style={{ color: '#2d6a4f' }} />
                   <span>Biography</span>
@@ -286,17 +333,28 @@ const PersonProfile: React.FC = () => {
                       <Link 
                         key={rel.personId} 
                         to={`/trees/${treeId}/persons/${rel.personId}`} 
-                        className="group block rounded-2xl bg-white p-3.5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
+                        className="group flex items-center gap-3 rounded-2xl bg-white p-3.5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
                         style={{ border: '1px solid #e8e0d0' }}
                       >
-                        <div className="text-sm font-bold transition-colors" style={{ color: '#2d3a2a' }}>
-                          {rel.fullName}
+                        <div
+                          className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl"
+                          style={{ background: '#f7f4ef', border: '1px solid #e8e0d0' }}
+                        >
+                          <DecompressedImage photoUrl={rel.photoUrl} fallbackIconSize={20} className="h-full w-full object-cover" />
                         </div>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <Heart size={12} className={['Wife', 'Husband', 'Spouse'].includes(rel.typeLabel) ? 'text-pink-500' : ''} style={['Wife', 'Husband', 'Spouse'].includes(rel.typeLabel) ? undefined : { color: '#2d6a4f' }} />
-                          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#a09080' }}>
-                            {rel.typeLabel}
-                          </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-bold transition-colors" style={{ color: '#2d3a2a' }}>
+                            {rel.fullName}
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <Heart size={12} className={['Wife', 'Husband', 'Spouse'].includes(rel.typeLabel) ? 'text-pink-500' : ''} style={['Wife', 'Husband', 'Spouse'].includes(rel.typeLabel) ? undefined : { color: '#2d6a4f' }} />
+                            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#a09080' }}>
+                              {rel.typeLabel}
+                            </span>
+                          </div>
+                          <p className="mt-1 truncate text-[11px]" style={{ color: '#a09080' }}>
+                            {rel.birthDate || 'Unknown'} - {rel.deathDate || 'Present'}
+                          </p>
                         </div>
                       </Link>
                     );

@@ -1,8 +1,22 @@
 import axios from 'axios';
 import { queueToast } from '../lib/toast-events';
 
+const apiBaseURL = import.meta.env.VITE_API_BASE_URL || '';
+
+export const getApiResourceUrl = (url: string) => {
+  if (/^(?:[a-z][a-z\d+\-.]*:)?\/\//i.test(url) || url.startsWith('data:') || url.startsWith('blob:')) {
+    return url;
+  }
+
+  if (!apiBaseURL) {
+    return url;
+  }
+
+  return `${apiBaseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`;
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '',
+  baseURL: apiBaseURL,
 });
 
 api.interceptors.request.use((config) => {

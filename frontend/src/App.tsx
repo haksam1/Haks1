@@ -34,6 +34,7 @@ function App() {
 
                 {/* Private Routes */}
                 <Route element={<PrivateRoute />}>
+                  <Route path="trees/:treeId/persons/:personId" element={<PersonProfile />} />
                   <Route element={<AppLayout />}>
                     <Route path="dashboard" element={<Dashboard />} />
                     <Route path="search" element={<Search />} />
@@ -41,7 +42,6 @@ function App() {
                     <Route path="settings" element={<Settings />} />
                     <Route path="trees/:treeId" element={<TreeView />} />
                     <Route path="trees/:treeId/persons/new" element={<AddEditPerson />} />
-                    <Route path="trees/:treeId/persons/:personId" element={<PersonProfile />} />
                     <Route path="trees/:treeId/persons/:personId/edit" element={<AddEditPerson />} />
                   </Route>
                 </Route>

@@ -100,6 +100,7 @@ const AddEditPerson: React.FC = () => {
   });
 
   const relationshipType = watch('relationshipType');
+  const relatedPersonId = watch('relatedPersonId');
 
   // Handle Photo Preview
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -180,6 +181,7 @@ const AddEditPerson: React.FC = () => {
 
   // Filter out the current person from related person list
   const filteredPersonsList = allPersons?.filter(p => !isEditing || p.id !== Number(personId)) || [];
+  const selectedRelatedPerson = filteredPersonsList.find((p) => p.id === Number(relatedPersonId));
 
   const fieldClass = "w-full rounded-xl px-4 py-3 text-sm outline-none transition-all";
   const fieldStyle = {
@@ -425,6 +427,31 @@ const AddEditPerson: React.FC = () => {
                       </select>
                       {errors.relatedPersonId && (
                         <p className="mt-1 text-xs text-red-600 font-semibold">{errors.relatedPersonId.message}</p>
+                      )}
+                      {selectedRelatedPerson && (
+                        <div
+                          className="mt-3 flex items-center gap-3 rounded-xl bg-[#fcfbf9] p-3"
+                          style={{ border: '1px solid #e8e0d0' }}
+                        >
+                          <div
+                            className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl"
+                            style={{ background: '#f7f4ef', border: '1px solid #e8e0d0' }}
+                          >
+                            <DecompressedImage
+                              photoUrl={selectedRelatedPerson.photoUrl}
+                              fallbackIconSize={20}
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold" style={{ color: '#2d3a2a' }}>
+                              {selectedRelatedPerson.firstName} {selectedRelatedPerson.lastName}
+                            </p>
+                            <p className="mt-0.5 text-xs" style={{ color: '#a09080' }}>
+                              {selectedRelatedPerson.birthDate || 'Unknown'} - {selectedRelatedPerson.deathDate || 'Present'}
+                            </p>
+                          </div>
+                        </div>
                       )}
                     </div>
 
