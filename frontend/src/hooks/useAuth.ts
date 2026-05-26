@@ -31,6 +31,20 @@ export const useAuth = () => {
     },
   });
 
+  const requestPasswordResetMutation = useMutation({
+    mutationFn: async (payload: { email: string }) => {
+      const { data } = await api.post('/api/auth/request-password-reset', payload);
+      return data;
+    },
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async (payload: { token: string; otp_code: string; new_password: string }) => {
+      const { data } = await api.post('/api/auth/reset-password', payload);
+      return data;
+    },
+  });
+
   const login = async (credentials: any) => {
     const toastId = toast.loading('Signing in', 'Checking your account details...');
 
@@ -73,11 +87,57 @@ export const useAuth = () => {
     }
   };
 
+  const requestPasswordReset = async (payload: { email: string }) => {
+    const toastId = toast.loading('Sending reset link', 'Checking your account...');
+
+    try {
+      const data = await requestPasswordResetMutation.mutateAsync(payload);
+      toast.updateToast(toastId, {
+        title: 'Email Sent',
+        message: 'A password reset link and OTP have been queued for your email.',
+        variant: 'success',
+      });
+      return data;
+    } catch (error) {
+      toast.updateToast(toastId, {
+        title: 'Request failed',
+        message: getApiErrorMessage(error, 'User not found or request failed'),
+        variant: 'error',
+      });
+      throw error;
+    }
+  };
+
+  const resetPassword = async (payload: { token: string; otp_code: string; new_password: string }) => {
+    const toastId = toast.loading('Resetting password', 'Updating your credentials...');
+
+    try {
+      const data = await resetPasswordMutation.mutateAsync(payload);
+      toast.updateToast(toastId, {
+        title: 'Password reset successful',
+        message: 'Your password has been changed. You can now log in.',
+        variant: 'success',
+      });
+      return data;
+    } catch (error) {
+      toast.updateToast(toastId, {
+        title: 'Reset failed',
+        message: getApiErrorMessage(error, 'Password reset failed. Check your token or OTP.'),
+        variant: 'error',
+      });
+      throw error;
+    }
+  };
+
   return {
     login,
     register,
+    requestPasswordReset,
+    resetPassword,
     logout: clearAuth,
     isLoggingIn: loginMutation.isPending,
     isRegistering: registerMutation.isPending,
+    isRequestingReset: requestPasswordResetMutation.isPending,
+    isResettingPassword: resetPasswordMutation.isPending,
   };
 };

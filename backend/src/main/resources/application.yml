@@ -5,6 +5,19 @@ spring:
     password: ${DB_PASSWORD:0002}
     driver-class-name: org.postgresql.Driver
 
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:kincore123@gmail.com}
+    password: ${MAIL_PASSWORD:zqwo nmfg jbfp doww}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
   jpa:
     hibernate:
       ddl-auto: validate
@@ -24,6 +37,9 @@ spring:
       max-request-size: 10MB
 
 app:
+  base-url: http://localhost:5173
+  mail:
+    display-name: kincore
   jwt:
     secret: ${JWT_SECRET:dGhpcy1pcy1hLXNlY3JldC1rZXktZm9yLWZhbWlseS10cmVlLWFwcGxpY2F0aW9uLXdoaWNoLWlzLWF0LWxlYXN0LTI1Ni1iaXRzLWxvbmc=}
     expiration-ms: 86400000

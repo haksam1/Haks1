@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { ArrowRight, Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, Lock } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 
 const loginSchema = z.object({
@@ -43,6 +43,14 @@ const Login: React.FC = () => {
       </div>
 
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f7f4ef] px-6 py-10 sm:px-10 lg:px-16">
+        {/* Back to Home Link */}
+        <div className="absolute left-6 top-6 sm:left-10 sm:top-10 lg:left-16 lg:top-16 z-20">
+          <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-bold text-[#2d6a4f] hover:underline">
+            <ArrowLeft size={16} />
+            <span>Back to home</span>
+          </Link>
+        </div>
+
         {/* Background Decorative Glows */}
         <div className="pointer-events-none absolute right-0 top-0 z-0 h-[400px] w-[400px] rounded-full bg-[#2d6a4f]/10 blur-3xl" />
         <div className="pointer-events-none absolute bottom-0 left-0 z-0 h-[450px] w-[450px] rounded-full bg-[#d4c9b0]/20 blur-3xl" />
@@ -81,7 +89,12 @@ const Login: React.FC = () => {
               </div>
 
               <div>
-                <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Password</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Password</label>
+                  <Link to="/forgot-password" className="text-xs font-semibold hover:underline" style={{ color: '#2d6a4f' }}>
+                    Forgot password?
+                  </Link>
+                </div>
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5" style={{ color: '#a09080' }}>
                     <Lock size={18} />

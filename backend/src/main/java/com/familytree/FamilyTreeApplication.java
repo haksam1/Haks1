@@ -9,17 +9,54 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import org.springframework.scheduling.annotation.EnableScheduling;
+
 import java.time.LocalDate;
 import java.util.Arrays;
 
 @SpringBootApplication
 @RequiredArgsConstructor
+@EnableScheduling
 public class FamilyTreeApplication {
 
     private final PasswordEncoder passwordEncoder;
 
     public static void main(String[] args) {
+        loadDotEnv();
         SpringApplication.run(FamilyTreeApplication.class, args);
+    }
+
+    private static void loadDotEnv() {
+        java.io.File envFile = new java.io.File(".env");
+        if (!envFile.exists()) {
+            envFile = new java.io.File("../.env");
+        }
+        if (envFile.exists()) {
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(envFile))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty() || line.startsWith("#")) {
+                        continue;
+                    }
+                    int eqIndex = line.indexOf('=');
+                    if (eqIndex > 0) {
+                        String key = line.substring(0, eqIndex).trim();
+                        String val = line.substring(eqIndex + 1).trim();
+                        if (val.startsWith("\"") && val.endsWith("\"")) {
+                            val = val.substring(1, val.length() - 1);
+                        } else if (val.startsWith("'") && val.endsWith("'")) {
+                            val = val.substring(1, val.length() - 1);
+                        }
+                        if (System.getProperty(key) == null && System.getenv(key) == null) {
+                            System.setProperty(key, val);
+                        }
+                    }
+                }
+            } catch (java.io.IOException e) {
+                // Silently ignore
+            }
+        }
     }
 
     @Bean
