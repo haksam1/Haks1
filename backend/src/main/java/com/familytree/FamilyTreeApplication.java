@@ -61,13 +61,49 @@ public class FamilyTreeApplication {
 
     @Bean
     public CommandLineRunner seeder(UserRepository userRepository, FamilyTreeRepository treeRepository,
-                                   PersonRepository personRepository, RelationshipRepository relationshipRepository) {
+                                   PersonRepository personRepository, RelationshipRepository relationshipRepository,
+                                   RoleRepository roleRepository) {
         return args -> {
-            if (userRepository.count() == 0) {
+            // 1. Seed Roles if they do not exist
+            Role adminRole = roleRepository.findByName("System Owner")
+                    .orElseGet(() -> roleRepository.save(Role.builder()
+                            .name("System Owner")
+                            .permissions(java.util.Set.of("view_dashboard", "view_search", "view_settings", "view_roles", "manage_all"))
+                            .build()));
+
+            Role familyHeadRole = roleRepository.findByName("Family Head")
+                    .orElseGet(() -> roleRepository.save(Role.builder()
+                            .name("Family Head")
+                            .permissions(java.util.Set.of("view_dashboard", "view_search", "view_settings", "manage_family"))
+                            .build()));
+
+            Role familyMemberRole = roleRepository.findByName("Family Member")
+                    .orElseGet(() -> roleRepository.save(Role.builder()
+                            .name("Family Member")
+                            .permissions(java.util.Set.of("view_dashboard", "manage_self"))
+                            .build()));
+
+            // 2. Seed System Admin if not exists
+            if (!userRepository.findByEmail("admin@familytree.com").isPresent()) {
+                userRepository.save(User.builder()
+                        .name("System Admin")
+                        .email("admin@familytree.com")
+                        .password(passwordEncoder.encode("AdminPassword123!"))
+                        .role(adminRole)
+                        .isActive(true)
+                        .isTemporaryPassword(false)
+                        .build());
+            }
+
+            // 3. Seed demo data
+            if (userRepository.findByEmail("john@example.com").isEmpty()) {
                 User user = User.builder()
                         .name("John Doe")
                         .email("john@example.com")
                         .password(passwordEncoder.encode("password"))
+                        .role(familyHeadRole)
+                        .isActive(true)
+                        .isTemporaryPassword(false)
                         .build();
                 userRepository.save(user);
 

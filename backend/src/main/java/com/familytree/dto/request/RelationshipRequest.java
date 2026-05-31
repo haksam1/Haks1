@@ -1,6 +1,5 @@
 package com.familytree.dto.request;
 
-import com.familytree.model.Relationship.RelationshipType;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -10,5 +9,5 @@ public class RelationshipRequest {
     private Long relatedPersonId;
 
     @NotNull(message = "Relationship type is required")
-    private RelationshipType type;
+    private String type;
 }

@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePersons } from '../hooks/usePersons';
+import { useAuthContext } from '../context/AuthContext';
 import { ArrowLeft, User, Sparkles, Camera, Phone, Link2, Mail } from 'lucide-react';
 import { getApiErrorMessage } from '../lib/errors';
 import api from '../api/client';
@@ -12,11 +13,12 @@ import DecompressedImage from '../components/DecompressedImage';
 const personSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
-  birthDate: z.string().optional().or(z.literal('')),
+  birthDate: z.string().min(1, 'Birth date is required'),
   deathDate: z.string().optional().or(z.literal('')),
   gender: z.string().optional(),
   bio: z.string().optional(),
   phoneNumber: z.string().optional().or(z.literal('')),
+  email: z.string().email('Invalid email address').optional().or(z.literal('')),
   relatedPersonId: z.string().optional().or(z.literal('')),
   relationshipType: z.string().optional().or(z.literal('')),
   parentEmail: z.string().optional().or(z.literal('')),
@@ -29,7 +31,7 @@ const personSchema = z.object({
   message: 'Please select a family member to connect to',
   path: ['relatedPersonId'],
 }).refine((data) => {
-  if (data.relationshipType === 'FATHER' || data.relationshipType === 'MOTHER') {
+  if (data.relationshipType === 'CHILD') {
     return !!data.phoneNumber && data.phoneNumber.trim() !== '';
   }
   return true;
@@ -55,6 +57,7 @@ const AddEditPerson: React.FC = () => {
   const { treeId, personId } = useParams();
   const navigate = useNavigate();
   const { create, update, useGet, useList } = usePersons(Number(treeId));
+  const { user } = useAuthContext();
   const isEditing = !!personId;
 
   const { data: person } = useGet(isEditing ? Number(personId) : undefined);
@@ -66,8 +69,15 @@ const AddEditPerson: React.FC = () => {
   const existingRelation = person?.relationships?.[0];
   const existingRelType = () => {
     if (!person || !existingRelation) return '';
+    if (existingRelation.type === 'CHILD') {
+      const related = allPersons?.find(p => p.id === existingRelation.relatedPersonId);
+      if (related) {
+        return related.gender === 'FEMALE' ? 'MOTHER' : 'FATHER';
+      }
+      return 'FATHER';
+    }
     if (existingRelation.type === 'PARENT') {
-      return person.gender === 'FEMALE' ? 'MOTHER' : 'FATHER';
+      return 'CHILD';
     }
     return existingRelation.type;
   };
@@ -82,9 +92,10 @@ const AddEditPerson: React.FC = () => {
       gender: person.gender || 'MALE',
       bio: person.bio || '',
       phoneNumber: person.phoneNumber || '',
-      relatedPersonId: existingRelation ? String(existingRelation.relatedPersonId) : '',
-      relationshipType: existingRelType(),
-      parentEmail: '', // Not stored directly on person
+      email: person.email || '',
+      relatedPersonId: existingRelation ? String(existingRelation.relatedPersonId) : (user?.role === 'Family Member' ? String(user.personId) : ''),
+      relationshipType: existingRelType() || (user?.role === 'Family Member' ? 'CHILD' : ''),
+      parentEmail: '',
     } : {
       firstName: '',
       lastName: '',
@@ -93,8 +104,9 @@ const AddEditPerson: React.FC = () => {
       gender: 'MALE',
       bio: '',
       phoneNumber: '',
-      relatedPersonId: '',
-      relationshipType: '',
+      email: '',
+      relatedPersonId: user?.role === 'Family Member' ? String(user.personId) : '',
+      relationshipType: user?.role === 'Family Member' ? 'CHILD' : '',
       parentEmail: '',
     },
   });
@@ -121,9 +133,10 @@ const AddEditPerson: React.FC = () => {
       lastName: data.lastName,
       birthDate: data.birthDate || null,
       deathDate: data.deathDate || null,
-      gender: data.relationshipType === 'FATHER' ? 'MALE' : data.relationshipType === 'MOTHER' ? 'FEMALE' : data.gender,
+      gender: data.gender,
       bio: data.bio || '',
       phoneNumber: data.phoneNumber || '',
+      email: data.email || '',
     };
 
     try {
@@ -150,17 +163,13 @@ const AddEditPerson: React.FC = () => {
 
       // 4. Save Relationship if selected
       if (data.relatedPersonId && data.relationshipType && savedPerson) {
-        let backendRelType = data.relationshipType;
-        if (backendRelType === 'FATHER' || backendRelType === 'MOTHER') {
-          backendRelType = 'PARENT';
-        }
         await api.post(`/api/trees/${treeId}/persons/${savedPerson.id}/relationships`, {
           relatedPersonId: Number(data.relatedPersonId),
-          type: backendRelType,
+          type: data.relationshipType,
         });
 
         // 5. Trigger Parent Setup API if identified as a parent
-        if (data.relationshipType === 'FATHER' || data.relationshipType === 'MOTHER') {
+        if (data.relationshipType === 'CHILD') {
           const fallbackEmail = `${savedPerson.firstName.toLowerCase()}.${savedPerson.lastName.toLowerCase()}@kincore.com`;
           await api.post('/api/parent-setup', {
             personId: savedPerson.id,
@@ -393,6 +402,25 @@ const AddEditPerson: React.FC = () => {
                 )}
               </div>
 
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold flex items-center gap-1.5" style={{ color: '#2d3a2a' }}>
+                  <Mail size={14} style={{ color: '#2d6a4f' }} />
+                  <span>Email Address</span>
+                </label>
+                <input
+                  {...register('email')}
+                  type="email"
+                  placeholder="e.g. member@example.com"
+                  className={fieldClass}
+                  style={fieldStyle}
+                  onFocus={(e) => setFocusBorder(e.target, '#2d6a4f')}
+                  onBlur={(e) => setFocusBorder(e.target, '#e8e0d0')}
+                />
+                {errors.email && (
+                  <p className="mt-1 text-xs text-red-600 font-semibold">{errors.email.message}</p>
+                )}
+              </div>
+
               {/* Family Connection Section */}
               <div className="lg:col-span-2 pt-4 mt-2 border-t border-[#f0ece4] space-y-4">
                 <h3 className="text-md font-bold flex items-center gap-2" style={{ color: '#1a3a2a', fontFamily: "'Playfair Display', Georgia, serif" }}>
@@ -400,7 +428,14 @@ const AddEditPerson: React.FC = () => {
                   <span>Family Tree Connection</span>
                 </h3>
 
-                {filteredPersonsList.length === 0 ? (
+                {user?.role === 'Family Member' ? (
+                  <div className="bg-[#e8f5ee] rounded-2xl p-5 border border-[#c8e6d0] text-center space-y-2">
+                    <p className="text-sm font-semibold text-[#1a3a2a]">Connecting to Your Profile</p>
+                    <p className="text-xs text-[#5a4a3a] max-w-lg mx-auto leading-relaxed">
+                      As a Family Member, you can only add children directly below yourself in the hierarchy. This profile will automatically be linked as a <strong>Child</strong> of your profile (<strong>{user.name}</strong>).
+                    </p>
+                  </div>
+                ) : filteredPersonsList.length === 0 ? (
                   <div className="bg-[#fcfbf9] rounded-2xl p-5 border border-[#e8e0d0] text-center space-y-2">
                     <p className="text-sm font-semibold text-[#1a3a2a]">First Member of the Tree</p>
                     <p className="text-xs text-[#7a6a5a] max-w-lg mx-auto leading-relaxed">
@@ -465,8 +500,8 @@ const AddEditPerson: React.FC = () => {
                         onBlur={(e) => setFocusBorder(e.target, '#e8e0d0')}
                       >
                         <option value="">-- None --</option>
-                        <option value="FATHER">Father (Parent)</option>
-                        <option value="MOTHER">Mother (Parent)</option>
+                        <option value="FATHER">Father</option>
+                        <option value="MOTHER">Mother</option>
                         <option value="CHILD">Child</option>
                         <option value="SPOUSE">Spouse</option>
                         <option value="SIBLING">Sibling</option>
@@ -477,7 +512,7 @@ const AddEditPerson: React.FC = () => {
               </div>
 
               {/* Conditional Parent Account Setup Fields */}
-              {(relationshipType === 'FATHER' || relationshipType === 'MOTHER') && (
+              {relationshipType === 'CHILD' && (
                 <div className="lg:col-span-2 bg-[#e8f5ee] rounded-2xl p-5 border border-[#c8e6d0] space-y-3">
                   <h4 className="text-sm font-bold flex items-center gap-2" style={{ color: '#1a3a2a' }}>
                     <Mail size={16} className="text-[#2d6a4f]" />

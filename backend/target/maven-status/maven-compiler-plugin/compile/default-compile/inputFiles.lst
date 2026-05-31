@@ -14,12 +14,15 @@
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/controller/SearchController.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/service/PhotoService.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/dto/request/RoleRequest.java
+/home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/model/Invitation.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/FamilyTreeApplication.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/dto/request/ParentSetupRequest.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/exception/ResourceNotFoundException.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/dto/response/ApiError.java
+/home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/model/ActivityLog.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/dto/request/RelationshipRequest.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/config/SecurityConfig.java
+/home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/dto/request/ChangePasswordRequest.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/repository/RelationshipRepository.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/service/PersonService.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/repository/PersonRepository.java
@@ -35,9 +38,11 @@
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/model/Relationship.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/dto/request/LoginRequest.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/service/AuthService.java
+/home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/repository/ActivityLogRepository.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/model/PasswordResetToken.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/dto/response/AuthResponse.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/dto/request/RegisterRequest.java
+/home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/controller/OwnerController.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/repository/PasswordResetTokenRepository.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/repository/RoleRepository.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/config/JwtConfig.java
@@ -50,5 +55,6 @@
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/controller/PersonController.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/security/UserDetailsServiceImpl.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/controller/RoleController.java
+/home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/repository/InvitationRepository.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/repository/PendingEmailAndMessageRepository.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/repository/UserRepository.java

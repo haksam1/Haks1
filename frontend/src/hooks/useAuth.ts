@@ -45,6 +45,13 @@ export const useAuth = () => {
     },
   });
 
+  const changePasswordMutation = useMutation({
+    mutationFn: async (payload: { newPassword: string }) => {
+      const { data } = await api.post('/api/auth/change-password', payload);
+      return data;
+    },
+  });
+
   const login = async (credentials: any) => {
     const toastId = toast.loading('Signing in', 'Checking your account details...');
 
@@ -129,15 +136,38 @@ export const useAuth = () => {
     }
   };
 
+  const changePassword = async (payload: { newPassword: string }) => {
+    const toastId = toast.loading('Updating password', 'Setting your permanent credentials...');
+
+    try {
+      const data = await changePasswordMutation.mutateAsync(payload);
+      toast.updateToast(toastId, {
+        title: 'Password updated',
+        message: 'Your permanent password has been set.',
+        variant: 'success',
+      });
+      return data;
+    } catch (error) {
+      toast.updateToast(toastId, {
+        title: 'Update failed',
+        message: getApiErrorMessage(error, 'Password update failed.'),
+        variant: 'error',
+      });
+      throw error;
+    }
+  };
+
   return {
     login,
     register,
     requestPasswordReset,
     resetPassword,
+    changePassword,
     logout: clearAuth,
     isLoggingIn: loginMutation.isPending,
     isRegistering: registerMutation.isPending,
     isRequestingReset: requestPasswordResetMutation.isPending,
     isResettingPassword: resetPasswordMutation.isPending,
+    isChangingPassword: changePasswordMutation.isPending,
   };
 };

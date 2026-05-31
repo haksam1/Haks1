@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
 import { useTrees } from '../hooks/useTrees';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuthContext } from '../context/AuthContext';
+import OwnerDashboard from './OwnerDashboard';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import api from '../api/client';
+import { useToast } from '../context/ToastContext';
+import { getApiErrorMessage } from '../lib/errors';
 import {
   Plus, TreePine, Trash2, Calendar, ArrowRight,
-  Users, Search, X, Leaf, GitBranch
+  Users, Search, X, Leaf, GitBranch, Mail, Send, Phone
 } from 'lucide-react';
 import { isAxiosError } from 'axios';
 
@@ -22,11 +28,60 @@ const dashboardBackgroundImage = '/images/d34bb4775f0b3a5d53edac6dcb4b8377.jpg';
 const Dashboard: React.FC = () => {
   const { useList, create, delete: deleteTree } = useTrees();
   const { data: trees, isLoading } = useList();
+  const { user } = useAuthContext();
+  const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (user?.role === 'Family Member' && trees && trees.length > 0) {
+      navigate(`/trees/${trees[0].id}`, { replace: true });
+    }
+  }, [user, trees, navigate]);
+
   const [newName, setNewName] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const toast = useToast();
+
+  const { data: familyInvitations, isLoading: isInvitesLoading, refetch: refetchInvites } = useQuery({
+    queryKey: ['family-invitations', trees?.[0]?.id],
+    queryFn: async () => {
+      if (!trees?.[0]?.id) return [];
+      const { data } = await api.get<any[]>(`/api/trees/${trees[0].id}/invitations`);
+      return data;
+    },
+    enabled: !!trees?.[0]?.id && user?.role === 'Family Head',
+  });
+
+  const resendInviteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      if (!trees?.[0]?.id) return;
+      await api.post(`/api/trees/${trees[0].id}/invitations/${id}/resend`);
+    },
+    onSuccess: () => {
+      refetchInvites();
+    }
+  });
+
+  const handleResendFamilyInvite = async (id: number, email: string) => {
+    const toastId = toast.loading('Resending', `Queuing invitation details for ${email}...`);
+    try {
+      await resendInviteMutation.mutateAsync(id);
+      toast.updateToast(toastId, {
+        title: 'Sent',
+        message: `Invitation resent to ${email}.`,
+        variant: 'success',
+      });
+    } catch (err) {
+      toast.updateToast(toastId, {
+        title: 'Failed',
+        message: getApiErrorMessage(err, 'Failed to resend invitation.'),
+        variant: 'error',
+      });
+    }
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,6 +118,25 @@ const Dashboard: React.FC = () => {
       return days <= 7;
     }).length || 0,
   };
+
+  if (user?.role === 'System Owner') {
+    return <OwnerDashboard />;
+  }
+
+  if (user?.role === 'Family Member' && (!trees || trees.length === 0)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen py-24 gap-4" style={{ backgroundColor: '#f7f4ef' }}>
+        <div className="relative h-14 w-14">
+          <div
+            className="h-14 w-14 animate-spin rounded-full"
+            style={{ border: '3px solid #e8e0d0', borderTopColor: '#2d6a4f' }}
+          />
+          <TreePine size={20} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ color: '#2d6a4f' }} />
+        </div>
+        <p className="text-sm" style={{ color: '#a09080' }}>Loading your family tree...</p>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -316,6 +390,93 @@ const Dashboard: React.FC = () => {
                   <span className="text-sm font-medium">Add new family</span>
                 </button>
               </div>
+
+              {user?.role === 'Family Head' && (
+                <div className="mt-12 rounded-2xl border bg-white p-6 shadow-sm" style={{ borderColor: '#e8e0d0' }}>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="rounded-xl bg-[#e8f5ee] p-2.5 text-[#2d6a4f]">
+                      <Mail size={22} />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold leading-none text-[#1a3a2a]" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>
+                        Family Invitations Log
+                      </h2>
+                      <p className="mt-1 text-xs font-semibold text-[#a09080]">
+                        Track sent invitations, credentials, and acceptance status for your family members.
+                      </p>
+                    </div>
+                  </div>
+
+                  {isInvitesLoading ? (
+                    <div className="p-8 text-center text-sm text-[#a09080]">Loading invitations...</div>
+                  ) : familyInvitations && familyInvitations.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr style={{ backgroundColor: '#fcfaf7', borderBottom: '1px solid #e8e0d0' }}>
+                            <th className="p-4 text-xs font-bold text-[#2d3a2a] uppercase tracking-wider">Member Name</th>
+                            <th className="p-4 text-xs font-bold text-[#2d3a2a] uppercase tracking-wider">Email / Phone</th>
+                            <th className="p-4 text-xs font-bold text-[#2d3a2a] uppercase tracking-wider">Temporary Password</th>
+                            <th className="p-4 text-xs font-bold text-[#2d3a2a] uppercase tracking-wider">Sent Date</th>
+                            <th className="p-4 text-xs font-bold text-[#2d3a2a] uppercase tracking-wider">Status</th>
+                            <th className="p-4 text-xs font-bold text-[#2d3a2a] uppercase tracking-wider text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {familyInvitations.map((inv: any) => (
+                            <tr key={inv.id} className="border-b hover:bg-slate-50 transition-colors" style={{ borderColor: '#f0ece4' }}>
+                              <td className="p-4 font-bold text-[#1a3a2a]">{inv.personName}</td>
+                              <td className="p-4 text-sm">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="text-[#2d3a2a] font-medium">{inv.email}</span>
+                                  {inv.phoneNumber && (
+                                    <span className="text-xs text-[#a09080] flex items-center gap-1">
+                                      <Phone size={10} />
+                                      {inv.phoneNumber}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-4 text-xs font-mono bg-slate-50 text-[#8a7a6a]" style={{ letterSpacing: '0.05em' }}>
+                                {inv.tempPassword}
+                              </td>
+                              <td className="p-4 text-sm text-[#a09080]">
+                                {inv.sentAt ? new Date(inv.sentAt).toLocaleString() : 'N/A'}
+                              </td>
+                              <td className="p-4 text-sm">
+                                <span
+                                  className="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                                  style={{
+                                    backgroundColor: inv.status === 'ACCEPTED' ? '#ecfdf5' : '#fffbeb',
+                                    color: inv.status === 'ACCEPTED' ? '#047857' : '#d97706',
+                                  }}
+                                >
+                                  {inv.status}
+                                </span>
+                              </td>
+                              <td className="p-4 text-sm text-right">
+                                {inv.status !== 'ACCEPTED' && (
+                                  <button
+                                    onClick={() => handleResendFamilyInvite(inv.id, inv.email)}
+                                    disabled={resendInviteMutation.isPending}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-lg border text-[#2d6a4f] hover:bg-[#e8f5ee] transition-all duration-200 cursor-pointer"
+                                    style={{ borderColor: '#2d6a4f' }}
+                                  >
+                                    <Send size={10} />
+                                    <span>Resend</span>
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center text-sm text-[#a09080]">No invitations sent yet. Add family members below your profile to send invitations.</div>
+                  )}
+                </div>
+              )}
             </>
           ) : (
             <EmptyState searchTerm={searchTerm} />

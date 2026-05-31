@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { usePersons } from '../hooks/usePersons';
 import { useUpload } from '../hooks/useUpload';
+import { useAuthContext } from '../context/AuthContext';
 import DecompressedImage from '../components/DecompressedImage';
 import { Calendar, Camera, Trash2, Edit2, ArrowLeft, Heart, Users, ScrollText } from 'lucide-react';
 
@@ -10,168 +11,21 @@ const profileBackgroundImage = '/images/d34bb4775f0b3a5d53edac6dcb4b8377.jpg';
 const PersonProfile: React.FC = () => {
   const { treeId, personId } = useParams();
   const navigate = useNavigate();
-  const { useGet, delete: deletePerson, useList } = usePersons(Number(treeId));
+  const { useGet, delete: deletePerson } = usePersons(Number(treeId));
   const { data: person, isLoading } = useGet(Number(personId));
-  const { data: allPersons } = useList();
   const { uploadPhoto, isUploading } = useUpload(Number(treeId), Number(personId));
+  const { user } = useAuthContext();
+
+  const canEdit = React.useMemo(() => {
+    if (!user) return false;
+    if (user.role === 'System Owner') return true;
+    return user.personId === Number(personId);
+  }, [user, personId]);
 
   const computedRelationships = React.useMemo(() => {
-    if (!person || !allPersons) return [];
-
-    const links: { fromId: number; toId: number; type: string }[] = [];
-    allPersons.forEach(p => {
-      p.relationships?.forEach(rel => {
-        links.push({
-          fromId: p.id,
-          toId: rel.relatedPersonId,
-          type: rel.type
-        });
-      });
-    });
-
-    const activeId = person.id;
-
-    // 1. Direct Parents
-    const parentIds = new Set<number>();
-    links.forEach(l => {
-      if (l.toId === activeId && l.type === 'PARENT') parentIds.add(l.fromId);
-      if (l.fromId === activeId && l.type === 'CHILD') parentIds.add(l.toId);
-    });
-
-    // 2. Grandparents (Parents of Parents)
-    const grandparentIds = new Set<number>();
-    parentIds.forEach(parentId => {
-      links.forEach(l => {
-        if (l.toId === parentId && l.type === 'PARENT') grandparentIds.add(l.fromId);
-        if (l.fromId === parentId && l.type === 'CHILD') grandparentIds.add(l.toId);
-      });
-    });
-
-    // 3. Children
-    const childIds = new Set<number>();
-    links.forEach(l => {
-      if (l.fromId === activeId && l.type === 'PARENT') childIds.add(l.toId);
-      if (l.toId === activeId && l.type === 'CHILD') childIds.add(l.fromId);
-    });
-
-    // 4. Grandchildren (Children of Children)
-    const grandchildIds = new Set<number>();
-    childIds.forEach(childId => {
-      links.forEach(l => {
-        if (l.fromId === childId && l.type === 'PARENT') grandchildIds.add(l.toId);
-        if (l.toId === childId && l.type === 'CHILD') grandchildIds.add(l.fromId);
-      });
-    });
-
-    // 5. Spouses
-    const spouseIds = new Set<number>();
-    links.forEach(l => {
-      if (l.type === 'SPOUSE' && (l.fromId === activeId || l.toId === activeId)) {
-        spouseIds.add(l.fromId === activeId ? l.toId : l.fromId);
-      }
-    });
-
-    // 6. Siblings
-    const siblingIds = new Set<number>();
-    links.forEach(l => {
-      if (l.type === 'SIBLING' && (l.fromId === activeId || l.toId === activeId)) {
-        siblingIds.add(l.fromId === activeId ? l.toId : l.fromId);
-      }
-    });
-    // Check for shared parents
-    allPersons.forEach(other => {
-      if (other.id === activeId) return;
-      const otherParents = new Set<number>();
-      links.forEach(l => {
-        if (l.toId === other.id && l.type === 'PARENT') otherParents.add(l.fromId);
-        if (l.fromId === other.id && l.type === 'CHILD') otherParents.add(l.toId);
-      });
-      let sharesParent = false;
-      parentIds.forEach(pId => {
-        if (otherParents.has(pId)) sharesParent = true;
-      });
-      if (sharesParent) siblingIds.add(other.id);
-    });
-
-    // Combine them with priority mapping
-    const relationMap = new Map<number, {
-      personId: number;
-      fullName: string;
-      typeLabel: string;
-      photoUrl?: string;
-      birthDate?: string;
-      deathDate?: string;
-    }>();
-    const getPersonDetails = (id: number) => allPersons.find(p => p.id === id);
-
-    const addRelation = (id: number, label: string) => {
-      const relP = getPersonDetails(id);
-      if (!relP) return;
-
-      const fullName = `${relP.firstName} ${relP.lastName}`;
-      const existing = relationMap.get(id);
-      if (!existing) {
-        relationMap.set(id, {
-          personId: id,
-          fullName,
-          typeLabel: label,
-          photoUrl: relP.photoUrl,
-          birthDate: relP.birthDate,
-          deathDate: relP.deathDate,
-        });
-      } else {
-        const priority = (lbl: string) => {
-          if (['Husband', 'Wife', 'Spouse'].includes(lbl)) return 5;
-          if (['Father', 'Mother', 'Parent'].includes(lbl)) return 4;
-          if (['Son', 'Daughter', 'Child'].includes(lbl)) return 3;
-          if (['Brother', 'Sister', 'Sibling'].includes(lbl)) return 2;
-          return 1; // Grandparents, grandchildren
-        };
-        if (priority(label) > priority(existing.typeLabel)) {
-          relationMap.set(id, {
-            personId: id,
-            fullName,
-            typeLabel: label,
-            photoUrl: relP.photoUrl,
-            birthDate: relP.birthDate,
-            deathDate: relP.deathDate,
-          });
-        }
-      }
-    };
-
-    spouseIds.forEach(id => {
-      const g = getPersonDetails(id)?.gender;
-      addRelation(id, g === 'FEMALE' ? 'Wife' : g === 'MALE' ? 'Husband' : 'Spouse');
-    });
-
-    parentIds.forEach(id => {
-      const g = getPersonDetails(id)?.gender;
-      addRelation(id, g === 'FEMALE' ? 'Mother' : g === 'MALE' ? 'Father' : 'Parent');
-    });
-
-    childIds.forEach(id => {
-      const g = getPersonDetails(id)?.gender;
-      addRelation(id, g === 'FEMALE' ? 'Daughter' : g === 'MALE' ? 'Son' : 'Child');
-    });
-
-    siblingIds.forEach(id => {
-      const g = getPersonDetails(id)?.gender;
-      addRelation(id, g === 'FEMALE' ? 'Sister' : g === 'MALE' ? 'Brother' : 'Sibling');
-    });
-
-    grandparentIds.forEach(id => {
-      const g = getPersonDetails(id)?.gender;
-      addRelation(id, g === 'FEMALE' ? 'Grandmother' : g === 'MALE' ? 'Grandfather' : 'Grandparent');
-    });
-
-    grandchildIds.forEach(id => {
-      const g = getPersonDetails(id)?.gender;
-      addRelation(id, g === 'FEMALE' ? 'Granddaughter' : g === 'MALE' ? 'Grandson' : 'Grandchild');
-    });
-
-    return Array.from(relationMap.values());
-  }, [person, allPersons]);
+    if (!person) return [];
+    return person.computedRelationships || [];
+  }, [person]);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -254,11 +108,13 @@ const PersonProfile: React.FC = () => {
             <div className="absolute -bottom-20 left-6 sm:left-8">
               <div className="group relative h-40 w-40 overflow-hidden rounded-2xl border-4 border-white bg-[#f7f4ef] shadow-md">
                 <DecompressedImage photoUrl={person.photoUrl} fallbackIconSize={48} className="w-full h-full object-cover" />
-                <label className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center bg-black/50 text-white opacity-0 transition-all duration-300 group-hover:opacity-100">
-                  <Camera size={24} />
-                  <span className="mt-1 text-[10px] font-bold">Upload Photo</span>
-                  <input type="file" className="hidden" onChange={handlePhotoUpload} disabled={isUploading} />
-                </label>
+                {canEdit && (
+                  <label className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center bg-black/50 text-white opacity-0 transition-all duration-300 group-hover:opacity-100">
+                    <Camera size={24} />
+                    <span className="mt-1 text-[10px] font-bold">Upload Photo</span>
+                    <input type="file" className="hidden" onChange={handlePhotoUpload} disabled={isUploading} />
+                  </label>
+                )}
               </div>
             </div>
           </div>
@@ -288,22 +144,26 @@ const PersonProfile: React.FC = () => {
               
               {/* Actions */}
               <div className="flex gap-2">
-                <Link 
-                  to={`/trees/${treeId}/persons/${personId}/edit`} 
-                  className="cursor-pointer rounded-xl p-3 transition-all duration-200"
-                  style={{ color: '#5a4a3a', border: '1px solid #e8e0d0' }}
-                  title="Edit Profile"
-                >
-                  <Edit2 size={18} />
-                </Link>
-                <button 
-                  onClick={handleDelete} 
-                  className="cursor-pointer rounded-xl p-3 transition-all duration-200 hover:bg-red-50 hover:text-red-600"
-                  style={{ color: '#5a4a3a', border: '1px solid #e8e0d0' }}
-                  title="Delete Profile"
-                >
-                  <Trash2 size={18} />
-                </button>
+                {canEdit && (
+                  <Link 
+                    to={`/trees/${treeId}/persons/${personId}/edit`} 
+                    className="cursor-pointer rounded-xl p-3 transition-all duration-200"
+                    style={{ color: '#5a4a3a', border: '1px solid #e8e0d0' }}
+                    title="Edit Profile"
+                  >
+                    <Edit2 size={18} />
+                  </Link>
+                )}
+                {user?.role === 'System Owner' && (
+                  <button 
+                    onClick={handleDelete} 
+                    className="cursor-pointer rounded-xl p-3 transition-all duration-200 hover:bg-red-50 hover:text-red-600"
+                    style={{ color: '#5a4a3a', border: '1px solid #e8e0d0' }}
+                    title="Delete Profile"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -331,8 +191,8 @@ const PersonProfile: React.FC = () => {
                   {computedRelationships.map((rel) => {
                     return (
                       <Link 
-                        key={rel.personId} 
-                        to={`/trees/${treeId}/persons/${rel.personId}`} 
+                        key={rel.relatedPersonId} 
+                        to={`/trees/${treeId}/persons/${rel.relatedPersonId}`} 
                         className="group flex items-center gap-3 rounded-2xl bg-white p-3.5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
                         style={{ border: '1px solid #e8e0d0' }}
                       >

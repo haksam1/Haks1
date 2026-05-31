@@ -48,6 +48,15 @@ public class Person {
     @Column(name = "phone_number", length = 50)
     private String phoneNumber;
 
+    @Column(name = "created_by_user_id")
+    private Long createdBy;
+
+    @Column(name = "modify_permission", length = 50)
+    private String modifyPermission;
+
+    @Column(name = "email", length = 255)
+    private String email;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 

@@ -40,4 +40,23 @@ public class TreeController {
         treeService.delete(id, user.getId());
         return ResponseEntity.noContent().build();
     }
+
+    @GetMapping("/{id}/invitations")
+    public ResponseEntity<List<Map<String, Object>>> getInvitations(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        return ResponseEntity.ok(treeService.getInvitations(id, user.getId()));
+    }
+
+    @PostMapping("/{id}/invitations/{invitationId}/resend")
+    public ResponseEntity<Map<String, String>> resendInvitation(
+            @PathVariable Long id,
+            @PathVariable Long invitationId,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        treeService.resendInvitation(id, invitationId, user.getId());
+        return ResponseEntity.ok(Map.of(
+                "status", "success",
+                "message", "Invitation resentment queued successfully"
+        ));
+    }
 }

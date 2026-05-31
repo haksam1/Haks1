@@ -15,9 +15,12 @@ public class PersonRequest {
     @Size(max = 100)
     private String lastName;
 
+    @jakarta.validation.constraints.NotNull(message = "Birth date is required")
     private LocalDate birthDate;
     private LocalDate deathDate;
     private String gender;
     private String bio;
     private String phoneNumber;
+    private String email;
+    private String photoUrl;
 }

@@ -35,6 +35,16 @@ public class User {
     @JoinColumn(name = "role_id")
     private Role role;
 
+    @Column(name = "person_id")
+    private Long personId;
+
+    @Column(name = "is_temporary_password")
+    private boolean isTemporaryPassword;
+
+    @Column(name = "is_active")
+    @Builder.Default
+    private boolean isActive = true;
+
     @Builder.Default
     @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<FamilyTree> trees = new ArrayList<>();

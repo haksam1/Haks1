@@ -7,13 +7,13 @@ import com.familytree.dto.request.ResetPasswordSubmitRequest;
 import com.familytree.dto.response.AuthResponse;
 import com.familytree.service.AuthService;
 import com.familytree.service.PasswordResetService;
+import com.familytree.dto.request.ChangePasswordRequest;
+import com.familytree.security.UserDetailsImpl;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
@@ -50,6 +50,17 @@ public class AuthController {
         return ResponseEntity.ok(Map.of(
                 "status", "success",
                 "message", "Your password has been successfully reset."
+        ));
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<Map<String, String>> changePassword(
+            @AuthenticationPrincipal UserDetailsImpl user,
+            @Valid @RequestBody ChangePasswordRequest req) {
+        authService.changePassword(user.getId(), req);
+        return ResponseEntity.ok(Map.of(
+                "status", "success",
+                "message", "Your password has been successfully updated."
         ));
     }
 }

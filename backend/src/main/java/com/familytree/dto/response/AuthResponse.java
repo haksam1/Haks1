@@ -17,4 +17,7 @@ public class AuthResponse {
     private String email;
     private String role;
     private Set<String> permissions;
+    private Long personId;
+    private boolean isTemporaryPassword;
+    private boolean isActive;
 }

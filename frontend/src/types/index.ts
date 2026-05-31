@@ -4,6 +4,9 @@ export interface User {
   email: string;
   role?: string;
   permissions?: string[];
+  personId?: number;
+  isTemporaryPassword?: boolean;
+  isActive?: boolean;
 }
 
 export interface AuthResponse extends User {
@@ -30,11 +33,24 @@ export interface Person {
   bio?: string;
   photoUrl?: string;
   phoneNumber?: string;
+  email?: string;
+  createdBy?: number;
+  modifyPermission?: string;
   relationships: Relationship[];
+  computedRelationships?: ComputedRelationship[];
 }
 
 export interface Relationship {
   id: number;
   relatedPersonId: number;
   type: 'PARENT' | 'CHILD' | 'SPOUSE' | 'SIBLING';
+}
+
+export interface ComputedRelationship {
+  relatedPersonId: number;
+  fullName: string;
+  typeLabel: string;
+  photoUrl?: string;
+  birthDate?: string;
+  deathDate?: string;
 }

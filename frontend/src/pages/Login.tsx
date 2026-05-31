@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useAuthContext } from '../context/AuthContext';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, Lock } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 
@@ -15,19 +16,62 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>;
 
 const Login: React.FC = () => {
-  const { login, isLoggingIn } = useAuth();
+  const { login, isLoggingIn, changePassword, isChangingPassword } = useAuth();
+  const { updateUser } = useAuthContext();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
+
+  // Forced Password Change states
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [changePasswordError, setChangePasswordError] = useState('');
+
   const { register, handleSubmit, formState: { errors }, setError } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
 
   const onSubmit = async (data: LoginForm) => {
     try {
-      await login(data);
-      navigate('/dashboard');
+      const res = await login(data);
+      if (res && res.isTemporaryPassword) {
+        setMustChangePassword(true);
+      } else {
+        navigate('/dashboard');
+      }
     } catch {
       setError('root', { message: 'Invalid email or password' });
+    }
+  };
+
+  const handlePasswordChangeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangePasswordError('');
+
+    if (newPassword.length < 8) {
+      setChangePasswordError('Password must be at least 8 characters long.');
+      return;
+    }
+    const hasUpper = /[A-Z]/.test(newPassword);
+    const hasLower = /[a-z]/.test(newPassword);
+    const hasDigit = /[0-9]/.test(newPassword);
+    const hasSpecial = /[@$!%*?&]/.test(newPassword);
+    if (!hasUpper || !hasLower || !hasDigit || !hasSpecial) {
+      setChangePasswordError('Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character (@$!%*?&).');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setChangePasswordError('Passwords do not match.');
+      return;
+    }
+
+    try {
+      await changePassword({ newPassword });
+      updateUser({ isTemporaryPassword: false, isActive: true });
+      navigate('/dashboard');
+    } catch (err: any) {
+      setChangePasswordError(err?.response?.data?.message || 'Failed to update password. Please try again.');
     }
   };
 
@@ -60,90 +104,175 @@ const Login: React.FC = () => {
             <Link to="/" className="inline-flex items-center gap-2 font-bold text-2xl mb-6">
               <BrandLogo markClassName="h-24 w-56" />
             </Link>
-            <h2 className="text-3xl font-bold tracking-tight" style={{ color: '#1a3a2a', fontFamily: "'Playfair Display', Georgia, serif" }}>Welcome Back</h2>
-            <p className="mt-2 text-sm" style={{ color: '#a09080' }}>
-              Don't have an account?{' '}
-              <Link to="/register" className="font-semibold transition-colors" style={{ color: '#2d6a4f' }}>
-                Create a free account
-              </Link>
-            </p>
+            {!mustChangePassword ? (
+              <>
+                <h2 className="text-3xl font-bold tracking-tight" style={{ color: '#1a3a2a', fontFamily: "'Playfair Display', Georgia, serif" }}>Welcome Back</h2>
+                <p className="mt-2 text-sm" style={{ color: '#a09080' }}>
+                  Don't have an account?{' '}
+                  <Link to="/register" className="font-semibold transition-colors" style={{ color: '#2d6a4f' }}>
+                    Create a free account
+                  </Link>
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-3xl font-bold tracking-tight" style={{ color: '#1a3a2a', fontFamily: "'Playfair Display', Georgia, serif" }}>Update Your Password</h2>
+                <p className="mt-2 text-sm" style={{ color: '#a09080' }}>
+                  You are logging in with a temporary password. Please set a strong, permanent password to secure your account.
+                </p>
+              </>
+            )}
           </div>
 
-          <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
-            <div className="space-y-4">
-              <div>
-                <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Email Address</label>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5" style={{ color: '#a09080' }}>
-                    <Mail size={18} />
+          {!mustChangePassword ? (
+            <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Email Address</label>
+                  <div className="relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5" style={{ color: '#a09080' }}>
+                      <Mail size={18} />
+                    </div>
+                    <input
+                      {...register('email')}
+                      type="email"
+                      className="block w-full rounded-xl py-3 pl-10 pr-4 text-sm outline-none transition-all duration-200"
+                      style={{ background: '#fff', border: '1.5px solid #e8e0d0', color: '#2d3a2a' }}
+                      placeholder="you@example.com"
+                    />
                   </div>
-                  <input
-                    {...register('email')}
-                    type="email"
-                    className="block w-full rounded-xl py-3 pl-10 pr-4 text-sm outline-none transition-all duration-200"
-                    style={{ background: '#fff', border: '1.5px solid #e8e0d0', color: '#2d3a2a' }}
-                    placeholder="you@example.com"
-                  />
+                  {errors.email && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.email.message}</p>}
                 </div>
-                {errors.email && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.email.message}</p>}
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Password</label>
+                    <Link to="/forgot-password" className="text-xs font-semibold hover:underline" style={{ color: '#2d6a4f' }}>
+                      Forgot password?
+                    </Link>
+                  </div>
+                  <div className="relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5" style={{ color: '#a09080' }}>
+                      <Lock size={18} />
+                    </div>
+                    <input
+                      {...register('password')}
+                      type={showPassword ? 'text' : 'password'}
+                      className="block w-full rounded-xl py-3 pl-10 pr-12 text-sm outline-none transition-all duration-200"
+                      style={{ background: '#fff', border: '1.5px solid #e8e0d0', color: '#2d3a2a' }}
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      onClick={() => setShowPassword((current) => !current)}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3.5 transition-colors"
+                      style={{ color: '#a09080' }}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  {errors.password && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.password.message}</p>}
+                </div>
               </div>
+
+              {errors.root && (
+                <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-center text-sm font-medium text-red-600">
+                  {errors.root.message}
+                </div>
+              )}
 
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Password</label>
-                  <Link to="/forgot-password" className="text-xs font-semibold hover:underline" style={{ color: '#2d6a4f' }}>
-                    Forgot password?
-                  </Link>
-                </div>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5" style={{ color: '#a09080' }}>
-                    <Lock size={18} />
+                <button
+                  disabled={isLoggingIn}
+                  type="submit"
+                  className="group relative flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-3.5 font-bold text-white transition-all duration-300 disabled:opacity-50"
+                  style={{ background: '#1a3a2a' }}
+                >
+                  {isLoggingIn ? (
+                    <span>Signing in...</span>
+                  ) : (
+                    <>
+                      <span>Sign In</span>
+                      <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form className="space-y-6" onSubmit={handlePasswordChangeSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>New Password</label>
+                  <div className="relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5" style={{ color: '#a09080' }}>
+                      <Lock size={18} />
+                    </div>
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="block w-full rounded-xl py-3 pl-10 pr-12 text-sm outline-none transition-all duration-200"
+                      style={{ background: '#fff', border: '1.5px solid #e8e0d0', color: '#2d3a2a' }}
+                      placeholder="••••••••"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((current) => !current)}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3.5 transition-colors"
+                      style={{ color: '#a09080' }}
+                    >
+                      {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
                   </div>
-                  <input
-                    {...register('password')}
-                    type={showPassword ? 'text' : 'password'}
-                    className="block w-full rounded-xl py-3 pl-10 pr-12 text-sm outline-none transition-all duration-200"
-                    style={{ background: '#fff', border: '1.5px solid #e8e0d0', color: '#2d3a2a' }}
-                    placeholder="••••••••"
-                  />
-                  <button
-                    type="button"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    onClick={() => setShowPassword((current) => !current)}
-                    className="absolute inset-y-0 right-0 flex items-center pr-3.5 transition-colors"
-                    style={{ color: '#a09080' }}
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
                 </div>
-                {errors.password && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.password.message}</p>}
-              </div>
-            </div>
 
-            {errors.root && (
-              <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-center text-sm font-medium text-red-600">
-                {errors.root.message}
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Confirm New Password</label>
+                  <div className="relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5" style={{ color: '#a09080' }}>
+                      <Lock size={18} />
+                    </div>
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="block w-full rounded-xl py-3 pl-10 pr-12 text-sm outline-none transition-all duration-200"
+                      style={{ background: '#fff', border: '1.5px solid #e8e0d0', color: '#2d3a2a' }}
+                      placeholder="••••••••"
+                      required
+                    />
+                  </div>
+                </div>
               </div>
-            )}
 
-            <div>
-              <button
-                disabled={isLoggingIn}
-                type="submit"
-                className="group relative flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-3.5 font-bold text-white transition-all duration-300 disabled:opacity-50"
-                style={{ background: '#1a3a2a' }}
-              >
-                {isLoggingIn ? (
-                  <span>Signing in...</span>
-                ) : (
-                  <>
-                    <span>Sign In</span>
-                    <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
+              {changePasswordError && (
+                <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-center text-xs font-medium text-red-600">
+                  {changePasswordError}
+                </div>
+              )}
+
+              <div>
+                <button
+                  disabled={isChangingPassword}
+                  type="submit"
+                  className="group relative flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-3.5 font-bold text-white transition-all duration-300 disabled:opacity-50"
+                  style={{ background: '#1a3a2a' }}
+                >
+                  {isChangingPassword ? (
+                    <span>Saving...</span>
+                  ) : (
+                    <>
+                      <span>Save & Continue</span>
+                      <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     </div>

@@ -1,2 +1,4 @@
 com/familytree/PasswordResetIntegrationTest.class
 com/familytree/FamilyTreeApplicationTests.class
+com/familytree/PersonServiceRefactoredTest.class
+com/familytree/DashboardAndRolesIntegrationTest.class
