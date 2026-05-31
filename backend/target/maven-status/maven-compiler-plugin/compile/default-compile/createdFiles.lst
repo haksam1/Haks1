@@ -11,6 +11,7 @@ com/familytree/dto/request/UserRoleUpdateRequest.class
 com/familytree/controller/TreeController.class
 com/familytree/config/SecurityConfig.class
 com/familytree/dto/response/PersonResponse.class
+com/familytree/config/FlywayConfig.class
 com/familytree/dto/response/ApiError.class
 com/familytree/controller/OwnerController.class
 com/familytree/service/EmailQueueScheduler.class

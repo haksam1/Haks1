@@ -95,6 +95,17 @@ public class FamilyTreeApplication {
                         .build());
             }
 
+            if (!userRepository.findByEmail("kincore123@gmail.com").isPresent()) {
+                userRepository.save(User.builder()
+                        .name("System Admin")
+                        .email("kincore123@gmail.com")
+                        .password(passwordEncoder.encode("AdminPassword123!"))
+                        .role(adminRole)
+                        .isActive(true)
+                        .isTemporaryPassword(false)
+                        .build());
+            }
+
             // 3. Seed demo data
             if (userRepository.findByEmail("john@example.com").isEmpty()) {
                 User user = User.builder()

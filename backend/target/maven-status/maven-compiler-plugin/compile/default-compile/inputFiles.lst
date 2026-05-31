@@ -57,4 +57,5 @@
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/controller/RoleController.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/repository/InvitationRepository.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/repository/PendingEmailAndMessageRepository.java
+/home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/config/FlywayConfig.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/repository/UserRepository.java
