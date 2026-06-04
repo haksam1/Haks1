@@ -15,4 +15,5 @@ public class TreeResponse {
     private String name;
     private Long ownerId;
     private LocalDateTime createdAt;
+    private String view;
 }

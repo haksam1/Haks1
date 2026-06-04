@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePersons } from '../hooks/usePersons';
 import { useAuthContext } from '../context/AuthContext';
-import { ArrowLeft, User, Sparkles, Camera, Phone, Link2, Mail } from 'lucide-react';
+import { ArrowLeft, User, Sparkles, Camera, Phone, Link2, Mail, Flame } from 'lucide-react';
 import { getApiErrorMessage } from '../lib/errors';
 import api from '../api/client';
 import DecompressedImage from '../components/DecompressedImage';
@@ -469,7 +469,7 @@ const AddEditPerson: React.FC = () => {
                           style={{ border: '1px solid #e8e0d0' }}
                         >
                           <div
-                            className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl"
+                            className={`h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl ${selectedRelatedPerson.deathDate ? 'grayscale opacity-75' : ''}`}
                             style={{ background: '#f7f4ef', border: '1px solid #e8e0d0' }}
                           >
                             <DecompressedImage
@@ -479,8 +479,13 @@ const AddEditPerson: React.FC = () => {
                             />
                           </div>
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-bold" style={{ color: '#2d3a2a' }}>
-                              {selectedRelatedPerson.firstName} {selectedRelatedPerson.lastName}
+                            <p className="truncate text-sm font-bold flex items-center gap-1" style={{ color: '#2d3a2a' }}>
+                              <span>{selectedRelatedPerson.firstName} {selectedRelatedPerson.lastName}</span>
+                              {selectedRelatedPerson.deathDate && (
+                                <span title="Deceased" className="flex shrink-0">
+                                  <Flame size={12} className="text-amber-600 fill-amber-300" />
+                                </span>
+                              )}
                             </p>
                             <p className="mt-0.5 text-xs" style={{ color: '#a09080' }}>
                               {selectedRelatedPerson.birthDate || 'Unknown'} - {selectedRelatedPerson.deathDate || 'Present'}

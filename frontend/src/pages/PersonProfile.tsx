@@ -4,23 +4,29 @@ import { usePersons } from '../hooks/usePersons';
 import { useUpload } from '../hooks/useUpload';
 import { useAuthContext } from '../context/AuthContext';
 import DecompressedImage from '../components/DecompressedImage';
-import { Calendar, Camera, Trash2, Edit2, ArrowLeft, Heart, Users, ScrollText } from 'lucide-react';
+import { Calendar, Camera, Trash2, Edit2, ArrowLeft, Heart, Users, ScrollText, Flame, Mail, Phone } from 'lucide-react';
+import { useTrees } from '../hooks/useTrees';
 
 const profileBackgroundImage = '/images/d34bb4775f0b3a5d53edac6dcb4b8377.jpg';
 
 const PersonProfile: React.FC = () => {
   const { treeId, personId } = useParams();
   const navigate = useNavigate();
+  const isPublic = window.location.pathname.startsWith('/public-trees');
   const { useGet, delete: deletePerson } = usePersons(Number(treeId));
-  const { data: person, isLoading } = useGet(Number(personId));
+  const { data: person, isLoading } = useGet(Number(personId), isPublic);
   const { uploadPhoto, isUploading } = useUpload(Number(treeId), Number(personId));
+  const { useGet: useTreeGet } = useTrees();
+  const { data: tree } = useTreeGet(Number(treeId), isPublic);
   const { user } = useAuthContext();
 
   const canEdit = React.useMemo(() => {
+    if (isPublic) return false;
     if (!user) return false;
     if (user.role === 'System Owner') return true;
+    if (user.role === 'Family Head' && tree?.ownerId === user.id) return true;
     return user.personId === Number(personId);
-  }, [user, personId]);
+  }, [user, personId, isPublic, tree]);
 
   const computedRelationships = React.useMemo(() => {
     if (!person) return [];
@@ -68,7 +74,7 @@ const PersonProfile: React.FC = () => {
         
         <div className="flex flex-wrap items-center justify-between gap-3">
           <button 
-            onClick={() => navigate(`/trees/${treeId}`)}
+            onClick={() => navigate(isPublic ? `/public-trees/${treeId}` : `/trees/${treeId}`)}
             className="flex cursor-pointer items-center gap-2 text-sm font-bold transition-colors"
             style={{ color: '#5a4a3a' }}
           >
@@ -76,7 +82,7 @@ const PersonProfile: React.FC = () => {
             <span>Back to Family</span>
           </button>
 
-          <Link to="/dashboard" className="flex items-center">
+          <Link to={isPublic ? "/" : "/dashboard"} className="flex items-center">
             <img
               src="/kincore_logo_v4.svg"
               alt="KinCore logo"
@@ -139,6 +145,12 @@ const PersonProfile: React.FC = () => {
                   <span className="rounded-full px-3 py-1 text-xs font-bold capitalize" style={{ background: '#e8f5ee', color: '#2d6a4f', border: '1px solid #c8e6d0' }}>
                     {person.gender?.toLowerCase()}
                   </span>
+                  {person.deathDate && (
+                    <span className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold" style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a' }}>
+                      <Flame size={14} className="fill-amber-300" />
+                      <span>Deceased</span>
+                    </span>
+                  )}
                 </div>
               </div>
               
@@ -154,7 +166,7 @@ const PersonProfile: React.FC = () => {
                     <Edit2 size={18} />
                   </Link>
                 )}
-                {user?.role === 'System Owner' && (
+                {(user?.role === 'System Owner' || (user?.role === 'Family Head' && tree?.ownerId === user.id)) && (
                   <button 
                     onClick={handleDelete} 
                     className="cursor-pointer rounded-xl p-3 transition-all duration-200 hover:bg-red-50 hover:text-red-600"
@@ -170,14 +182,49 @@ const PersonProfile: React.FC = () => {
             {/* Profile Grid (Bio & Relationships) */}
             <div className="mt-10 grid gap-8 border-t pt-8 lg:grid-cols-[minmax(0,2fr)_360px]" style={{ borderColor: '#f0ece4' }}>
               {/* Biography Section */}
-              <div className="space-y-4">
-                <h3 className="flex items-center gap-2 text-lg font-bold" style={{ color: '#1a3a2a' }}>
-                  <ScrollText size={18} style={{ color: '#2d6a4f' }} />
-                  <span>Biography</span>
-                </h3>
-                <p className="whitespace-pre-line rounded-2xl p-6 text-sm leading-relaxed" style={{ background: '#f7f4ef', border: '1px solid #e8e0d0', color: '#5a4a3a' }}>
-                  {person.bio || "No biography details have been added for this family member."}
-                </p>
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <h3 className="flex items-center gap-2 text-lg font-bold" style={{ color: '#1a3a2a' }}>
+                    <ScrollText size={18} style={{ color: '#2d6a4f' }} />
+                    <span>Biography</span>
+                  </h3>
+                  <p className="whitespace-pre-line rounded-2xl p-6 text-sm leading-relaxed" style={{ background: '#f7f4ef', border: '1px solid #e8e0d0', color: '#5a4a3a' }}>
+                    {person.bio || "No biography details have been added for this family member."}
+                  </p>
+                </div>
+
+                {(person.email || person.phoneNumber) && (
+                  <div className="space-y-4">
+                    <h3 className="flex items-center gap-2 text-lg font-bold" style={{ color: '#1a3a2a' }}>
+                      <Mail size={18} style={{ color: '#2d6a4f' }} />
+                      <span>Contact Information</span>
+                    </h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {person.email && (
+                        <div className="flex items-center gap-3 rounded-2xl bg-[#f7f4ef] p-4" style={{ border: '1px solid #e8e0d0' }}>
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#2d6a4f]">
+                            <Mail size={18} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-[#a09080]">Email Address</p>
+                            <a href={`mailto:${person.email}`} className="text-sm font-bold text-[#2d3a2a] hover:underline break-all">{person.email}</a>
+                          </div>
+                        </div>
+                      )}
+                      {person.phoneNumber && (
+                        <div className="flex items-center gap-3 rounded-2xl bg-[#f7f4ef] p-4" style={{ border: '1px solid #e8e0d0' }}>
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#2d6a4f]">
+                            <Phone size={18} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-[#a09080]">Phone Number</p>
+                            <a href={`tel:${person.phoneNumber}`} className="text-sm font-bold text-[#2d3a2a] hover:underline break-all">{person.phoneNumber}</a>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
               
               {/* Relationships Section */}
@@ -192,19 +239,24 @@ const PersonProfile: React.FC = () => {
                     return (
                       <Link 
                         key={rel.relatedPersonId} 
-                        to={`/trees/${treeId}/persons/${rel.relatedPersonId}`} 
+                        to={isPublic ? `/public-trees/${treeId}/persons/${rel.relatedPersonId}` : `/trees/${treeId}/persons/${rel.relatedPersonId}`} 
                         className="group flex items-center gap-3 rounded-2xl bg-white p-3.5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
                         style={{ border: '1px solid #e8e0d0' }}
                       >
                         <div
-                          className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl"
+                          className={`h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl ${rel.deathDate ? 'grayscale opacity-75' : ''}`}
                           style={{ background: '#f7f4ef', border: '1px solid #e8e0d0' }}
                         >
                           <DecompressedImage photoUrl={rel.photoUrl} fallbackIconSize={20} className="h-full w-full object-cover" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-bold transition-colors" style={{ color: '#2d3a2a' }}>
-                            {rel.fullName}
+                          <div className="truncate text-sm font-bold transition-colors flex items-center gap-1" style={{ color: '#2d3a2a' }}>
+                            <span className="truncate">{rel.fullName}</span>
+                            {rel.deathDate && (
+                              <span title="Deceased" className="flex shrink-0">
+                                <Flame size={12} className="text-amber-600 fill-amber-300" />
+                              </span>
+                            )}
                           </div>
                           <div className="mt-1 flex items-center gap-1.5">
                             <Heart size={12} className={['Wife', 'Husband', 'Spouse'].includes(rel.typeLabel) ? 'text-pink-500' : ''} style={['Wife', 'Husband', 'Spouse'].includes(rel.typeLabel) ? undefined : { color: '#2d6a4f' }} />

@@ -35,6 +35,8 @@ function App() {
                 <Route path="/register" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/public-trees/:treeId" element={<TreeView />} />
+                <Route path="/public-trees/:treeId/persons/:personId" element={<PersonProfile />} />
 
                 {/* Private Routes */}
                 <Route element={<PrivateRoute />}>

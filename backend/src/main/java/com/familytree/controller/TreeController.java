@@ -41,6 +41,14 @@ public class TreeController {
         return ResponseEntity.noContent().build();
     }
 
+    @PutMapping("/{id}/view")
+    public ResponseEntity<TreeResponse> updateView(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> payload,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        return ResponseEntity.ok(treeService.updateView(id, payload.get("view"), user.getId()));
+    }
+
     @GetMapping("/{id}/invitations")
     public ResponseEntity<List<Map<String, Object>>> getInvitations(
             @PathVariable Long id,

@@ -34,12 +34,14 @@ public class PersonService {
         FamilyTree tree = validateAccess(treeId, userId);
         List<Person> allPersons = personRepository.findAllByTreeId(treeId);
 
-        User user = userRepository.findById(userId).orElseThrow();
-        if (user.getRole() != null && "Family Member".equals(user.getRole().getName())) {
-            java.util.Set<Long> ancestors = findAncestors(user.getPersonId(), allPersons);
-            allPersons = allPersons.stream()
-                    .filter(p -> ancestors.contains(p.getId()))
-                    .collect(Collectors.toList());
+        if (userId != null) {
+            User user = userRepository.findById(userId).orElseThrow();
+            if (user.getRole() != null && "Family Member".equals(user.getRole().getName())) {
+                java.util.Set<Long> ancestors = findAncestors(user.getPersonId(), allPersons);
+                allPersons = allPersons.stream()
+                        .filter(p -> ancestors.contains(p.getId()))
+                        .collect(Collectors.toList());
+            }
         }
 
         final List<Person> finalPersons = allPersons;
@@ -54,15 +56,17 @@ public class PersonService {
                 .orElseThrow(() -> new ResourceNotFoundException("Person not found"));
         List<Person> allPersons = personRepository.findAllByTreeId(treeId);
 
-        User user = userRepository.findById(userId).orElseThrow();
-        if (user.getRole() != null && "Family Member".equals(user.getRole().getName())) {
-            java.util.Set<Long> ancestors = findAncestors(user.getPersonId(), allPersons);
-            if (!ancestors.contains(personId)) {
-                throw new ResourceNotFoundException("Person not found");
+        if (userId != null) {
+            User user = userRepository.findById(userId).orElseThrow();
+            if (user.getRole() != null && "Family Member".equals(user.getRole().getName())) {
+                java.util.Set<Long> ancestors = findAncestors(user.getPersonId(), allPersons);
+                if (!ancestors.contains(personId)) {
+                    throw new ResourceNotFoundException("Person not found");
+                }
+                allPersons = allPersons.stream()
+                        .filter(p -> ancestors.contains(p.getId()))
+                        .collect(Collectors.toList());
             }
-            allPersons = allPersons.stream()
-                    .filter(p -> ancestors.contains(p.getId()))
-                    .collect(Collectors.toList());
         }
         return mapToResponse(person, allPersons);
     }
@@ -182,8 +186,9 @@ public class PersonService {
 
         boolean isAdmin = user.getRole() != null && "System Owner".equals(user.getRole().getName());
         boolean isSelf = personId.equals(user.getPersonId());
-        if (!isAdmin && !isSelf) {
-            throw new BadRequestException("You can only edit your own profile.");
+        boolean isOwner = tree.getOwner().getId().equals(userId);
+        if (!isAdmin && !isSelf && !isOwner) {
+            throw new BadRequestException("You can only edit your own profile, unless you are a System Owner or the Family Head who created this tree.");
         }
 
         List<Person> existing = personRepository.findAllByTreeId(treeId);
@@ -229,8 +234,9 @@ public class PersonService {
                 .orElseThrow(() -> new ResourceNotFoundException("Person not found"));
 
         boolean isAdmin = user.getRole() != null && "System Owner".equals(user.getRole().getName());
-        if (!isAdmin) {
-            throw new BadRequestException("Only System Owners can delete family members.");
+        boolean isOwner = tree.getOwner().getId().equals(userId);
+        if (!isAdmin && !isOwner) {
+            throw new BadRequestException("Only System Owners or the Family Head who created the tree can delete family members.");
         }
 
         personRepository.delete(person);
@@ -374,17 +380,28 @@ public class PersonService {
     }
 
     private FamilyTree validateAccess(Long treeId, Long userId) {
+        FamilyTree tree = treeRepository.findById(treeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Tree not found"));
+        if ("yes".equals(tree.getView())) {
+            return tree;
+        }
+
+        if (userId == null) {
+            throw new ResourceNotFoundException("User not found");
+        }
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         String role = user.getRole() != null ? user.getRole().getName() : "";
         if ("System Owner".equals(role)) {
-            return treeRepository.findById(treeId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Tree not found"));
+            return tree;
         } else if ("Family Head".equals(role)) {
-            return treeRepository.findByIdAndOwnerId(treeId, userId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Tree not found or access denied"));
-        } else if ("Family Member".equals(role)) {
+            if (!tree.getOwner().getId().equals(userId)) {
+                throw new ResourceNotFoundException("Tree not found or access denied");
+            }
+            return tree;
+        } else if ("Family Member".equals(role) || "Parent Admin".equals(role)) {
             if (user.getPersonId() == null) {
                 throw new BadRequestException("User profile is not linked to any family member");
             }

@@ -16,6 +16,7 @@
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/dto/request/RoleRequest.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/model/Invitation.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/FamilyTreeApplication.java
+/home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/controller/PublicTreeController.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/dto/request/ParentSetupRequest.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/exception/ResourceNotFoundException.java
 /home/haks/Projects/family-tree-weaver-main/backend/src/main/java/com/familytree/dto/response/ApiError.java

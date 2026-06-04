@@ -200,17 +200,6 @@ public class AuthService {
                         .permissions(Set.of("view_dashboard", "view_search", "view_settings", "view_roles", "manage_all"))
                         .build()));
 
-        if (!userRepository.findByEmail("admin@familytree.com").isPresent()) {
-            userRepository.save(User.builder()
-                    .name("System Admin")
-                    .email("admin@familytree.com")
-                    .password(passwordEncoder.encode("AdminPassword123!"))
-                    .role(adminRole)
-                    .isActive(true)
-                    .isTemporaryPassword(false)
-                    .build());
-        }
-
         if (!userRepository.findByEmail("kincore123@gmail.com").isPresent()) {
             userRepository.save(User.builder()
                     .name("System Admin")

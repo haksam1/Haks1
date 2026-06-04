@@ -33,12 +33,9 @@ public class ParentSetupController {
         // 1. Generate unique random password
         String randomPassword = UUID.randomUUID().toString().substring(0, 8) + "@Pt1";
 
-        // 2. Fetch or create 'Parent Admin' role
-        Role parentRole = roleRepository.findByName("Parent Admin")
-                .orElseGet(() -> roleRepository.save(Role.builder()
-                        .name("Parent Admin")
-                        .permissions(java.util.Set.of("view_dashboard", "view_search", "view_settings"))
-                        .build()));
+        // 2. Fetch 'Family Member' role
+        Role memberRole = roleRepository.findByName("Family Member")
+                .orElseThrow(() -> new IllegalStateException("Family Member role not found"));
 
         // 3. Provision or update User account
         User user = userRepository.findByEmail(req.getEmail())
@@ -47,14 +44,23 @@ public class ParentSetupController {
                             .name(req.getName())
                             .email(req.getEmail())
                             .password(passwordEncoder.encode(randomPassword))
-                            .role(parentRole)
+                            .role(memberRole)
+                            .personId(req.getPersonId())
                             .build();
                     return userRepository.save(newUser);
                 });
 
-        // Ensure user has Parent Admin role
-        if (user.getRole() == null || !user.getRole().getName().equals("Parent Admin")) {
-            user.setRole(parentRole);
+        // Ensure user has Family Member role and personId is linked
+        boolean needsUpdate = false;
+        if (user.getRole() == null || !user.getRole().getName().equals("Family Member")) {
+            user.setRole(memberRole);
+            needsUpdate = true;
+        }
+        if (user.getPersonId() == null || !user.getPersonId().equals(req.getPersonId())) {
+            user.setPersonId(req.getPersonId());
+            needsUpdate = true;
+        }
+        if (needsUpdate) {
             userRepository.save(user);
         }
 

@@ -7,9 +7,11 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { getApiErrorMessage } from '../lib/errors';
+import { FamilyTree } from '../types';
 import {
   Plus, TreePine, Trash2, Calendar, ArrowRight,
-  Users, Search, X, Leaf, GitBranch, Mail, Send, Phone
+  Users, Search, X, Leaf, GitBranch, Mail, Send, Phone,
+  Eye, EyeOff
 } from 'lucide-react';
 import { isAxiosError } from 'axios';
 
@@ -32,7 +34,7 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
 
   React.useEffect(() => {
-    if (user?.role === 'Family Member' && trees && trees.length > 0) {
+    if ((user?.role === 'Family Member' || user?.role === 'Parent Admin') && trees && trees.length > 0) {
       navigate(`/trees/${trees[0].id}`, { replace: true });
     }
   }, [user, trees, navigate]);
@@ -123,17 +125,38 @@ const Dashboard: React.FC = () => {
     return <OwnerDashboard />;
   }
 
-  if (user?.role === 'Family Member' && (!trees || trees.length === 0)) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen py-24 gap-4" style={{ backgroundColor: '#f7f4ef' }}>
-        <div className="relative h-14 w-14">
-          <div
-            className="h-14 w-14 animate-spin rounded-full"
-            style={{ border: '3px solid #e8e0d0', borderTopColor: '#2d6a4f' }}
-          />
-          <TreePine size={20} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ color: '#2d6a4f' }} />
+  if ((user?.role === 'Family Member' || user?.role === 'Parent Admin') && (!trees || trees.length === 0)) {
+    if (isLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen py-24 gap-4" style={{ backgroundColor: '#f7f4ef' }}>
+          <div className="relative h-14 w-14">
+            <div
+              className="h-14 w-14 animate-spin rounded-full"
+              style={{ border: '3px solid #e8e0d0', borderTopColor: '#2d6a4f' }}
+            />
+            <TreePine size={20} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" style={{ color: '#2d6a4f' }} />
+          </div>
+          <p className="text-sm" style={{ color: '#a09080' }}>Loading your family tree...</p>
         </div>
-        <p className="text-sm" style={{ color: '#a09080' }}>Loading your family tree...</p>
+      );
+    }
+
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen py-24 gap-6 px-4 text-center" style={{ backgroundColor: '#f7f4ef' }}>
+        <div
+          className="flex h-20 w-20 items-center justify-center rounded-full"
+          style={{ background: '#e8f5ee', border: '1px solid #c8e6d0' }}
+        >
+          <TreePine size={36} style={{ color: '#2d6a4f' }} />
+        </div>
+        <div className="max-w-md">
+          <h2 className="text-2xl font-bold mb-2 text-[#1a3a2a]" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>
+            No Family Tree Linked
+          </h2>
+          <p className="text-sm leading-relaxed" style={{ color: '#a09080' }}>
+            Your account is not currently linked to any family tree. Please ask your Family Head to invite you or link your profile to a family member in their tree.
+          </p>
+        </div>
       </div>
     );
   }
@@ -272,40 +295,42 @@ const Dashboard: React.FC = () => {
               </div>
 
               {/* Create form */}
-              <form onSubmit={handleCreate} className="flex flex-1 gap-2 lg:justify-end">
-                <div className="relative flex-1 lg:max-w-xs">
-                  <TreePine
-                    size={15}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2"
-                    style={{ color: '#a09080' }}
-                  />
-                  <input
-                    type="text"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Name your new family…"
-                    className="w-full rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none transition-all"
-                    style={{
-                      background: '#f7f4ef',
-                      border: '1.5px solid #e8e0d0',
-                      color: '#2d3a2a',
-                    }}
-                    onFocus={(e) => (e.target.style.borderColor = '#2d6a4f')}
-                    onBlur={(e) => (e.target.style.borderColor = '#e8e0d0')}
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={isCreating}
-                  className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 disabled:opacity-60"
-                  style={{ background: '#1a3a2a' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = '#2d6a4f')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = '#1a3a2a')}
-                >
-                  <Plus size={16} />
-                  <span>{isCreating ? 'Creating…' : 'New Family'}</span>
-                </button>
-              </form>
+              {user?.role !== 'Family Member' && user?.role !== 'Parent Admin' && (
+                <form onSubmit={handleCreate} className="flex flex-1 gap-2 lg:justify-end">
+                  <div className="relative flex-1 lg:max-w-xs">
+                    <TreePine
+                      size={15}
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2"
+                      style={{ color: '#a09080' }}
+                    />
+                    <input
+                      type="text"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      placeholder="Name your new family…"
+                      className="w-full rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none transition-all"
+                      style={{
+                        background: '#f7f4ef',
+                        border: '1.5px solid #e8e0d0',
+                        color: '#2d3a2a',
+                      }}
+                      onFocus={(e) => (e.target.style.borderColor = '#2d6a4f')}
+                      onBlur={(e) => (e.target.style.borderColor = '#e8e0d0')}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isCreating}
+                    className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 disabled:opacity-60"
+                    style={{ background: '#1a3a2a' }}
+                    onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = '#2d6a4f')}
+                    onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = '#1a3a2a')}
+                  >
+                    <Plus size={16} />
+                    <span>{isCreating ? 'Creating…' : 'New Family'}</span>
+                  </button>
+                </form>
+              )}
             </div>
 
             {createError && (
@@ -357,38 +382,41 @@ const Dashboard: React.FC = () => {
                     tree={tree}
                     onDelete={() => handleDelete(tree.id, tree.name)}
                     isDeleting={deletingId === tree.id}
+                    currentUserId={user?.id}
                   />
                 ))}
 
                 {/* "Add new" ghost card */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const input = document.querySelector<HTMLInputElement>('input[placeholder="Name your new family…"]');
-                    input?.focus();
-                  }}
-                  className="group flex flex-col items-center justify-center gap-3 rounded-2xl py-12 transition-all duration-300"
-                  style={{
-                    border: '2px dashed #d4c9b0',
-                    color: '#a09080',
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#2d6a4f';
-                    (e.currentTarget as HTMLButtonElement).style.color = '#2d6a4f';
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#d4c9b0';
-                    (e.currentTarget as HTMLButtonElement).style.color = '#a09080';
-                  }}
-                >
-                  <div
-                    className="flex h-12 w-12 items-center justify-center rounded-2xl transition-all duration-300"
-                    style={{ background: '#f7f4ef' }}
+                {user?.role !== 'Family Member' && user?.role !== 'Parent Admin' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const input = document.querySelector<HTMLInputElement>('input[placeholder="Name your new family…"]');
+                      input?.focus();
+                    }}
+                    className="group flex flex-col items-center justify-center gap-3 rounded-2xl py-12 transition-all duration-300"
+                    style={{
+                      border: '2px dashed #d4c9b0',
+                      color: '#a09080',
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = '#2d6a4f';
+                      (e.currentTarget as HTMLButtonElement).style.color = '#2d6a4f';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = '#d4c9b0';
+                      (e.currentTarget as HTMLButtonElement).style.color = '#a09080';
+                    }}
                   >
-                    <Plus size={20} />
-                  </div>
-                  <span className="text-sm font-medium">Add new family</span>
-                </button>
+                    <div
+                      className="flex h-12 w-12 items-center justify-center rounded-2xl transition-all duration-300"
+                      style={{ background: '#f7f4ef' }}
+                    >
+                      <Plus size={20} />
+                    </div>
+                    <span className="text-sm font-medium">Add new family</span>
+                  </button>
+                )}
               </div>
 
               {user?.role === 'Family Head' && (
@@ -509,13 +537,30 @@ const Dashboard: React.FC = () => {
 
 /* ───── FAMILY CARD ───── */
 type TreeCardProps = {
-  tree: { id: number; name: string; createdAt: string };
+  tree: FamilyTree;
   onDelete: () => void;
   isDeleting: boolean;
+  currentUserId?: number;
 };
 
-const TreeCard: React.FC<TreeCardProps> = ({ tree, onDelete, isDeleting }) => {
+const TreeCard: React.FC<TreeCardProps> = ({ tree, onDelete, isDeleting, currentUserId }) => {
   const [hovered, setHovered] = useState(false);
+  const [isTogglingView, setIsTogglingView] = useState(false);
+  const { updateView } = useTrees();
+
+  const isOwner = currentUserId === tree.ownerId;
+
+  const handleToggleView = async () => {
+    setIsTogglingView(true);
+    try {
+      const nextView = tree.view === 'yes' ? 'no' : 'yes';
+      await updateView(tree.id, nextView);
+    } catch (e) {
+      // toast is already handled inside updateView
+    } finally {
+      setIsTogglingView(false);
+    }
+  };
 
   return (
     <div
@@ -582,14 +627,46 @@ const TreeCard: React.FC<TreeCardProps> = ({ tree, onDelete, isDeleting }) => {
         {/* Divider */}
         <div className="mt-auto pt-4" style={{ borderTop: '1px solid #f0ece4' }}>
           <div className="flex items-center justify-between">
-            <Link
-              to={`/trees/${tree.id}`}
-              className="group/link flex items-center gap-1.5 text-sm font-semibold transition-all"
-              style={{ color: '#2d6a4f' }}
-            >
-              <span>Explore</span>
-              <ArrowRight size={14} className="transition-transform duration-200 group-hover/link:translate-x-1" />
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link
+                to={`/trees/${tree.id}`}
+                className="group/link flex items-center gap-1.5 text-sm font-semibold transition-all"
+                style={{ color: '#2d6a4f' }}
+              >
+                <span>Explore</span>
+                <ArrowRight size={14} className="transition-transform duration-200 group-hover/link:translate-x-1" />
+              </Link>
+
+              {isOwner && (
+                <button
+                  type="button"
+                  onClick={handleToggleView}
+                  disabled={isTogglingView}
+                  className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm transition-all duration-200 disabled:opacity-60 cursor-pointer"
+                  style={{
+                    backgroundColor: tree.view === 'yes' ? '#e8f5ee' : '#f0ece4',
+                    border: tree.view === 'yes' ? '1px solid #c8e6d0' : '1px solid #e8e0d0',
+                    color: tree.view === 'yes' ? '#2d6a4f' : '#8a7a6a',
+                  }}
+                  title={tree.view === 'yes' ? 'Make tree private' : 'Publish tree to home page'}
+                >
+                  {isTogglingView ? (
+                    <div
+                      className="h-3 w-3 animate-spin rounded-full"
+                      style={{
+                        border: '2px solid currentColor',
+                        borderTopColor: 'transparent',
+                      }}
+                    />
+                  ) : tree.view === 'yes' ? (
+                    <Eye size={12} />
+                  ) : (
+                    <EyeOff size={12} />
+                  )}
+                  <span>{tree.view === 'yes' ? 'Public' : 'Private'}</span>
+                </button>
+              )}
+            </div>
 
             <button
               type="button"

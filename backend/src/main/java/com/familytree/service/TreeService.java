@@ -49,7 +49,7 @@ public class TreeService {
             return treeRepository.findAllByOwnerId(userId).stream()
                     .map(this::mapToResponse)
                     .collect(Collectors.toList());
-        } else if ("Family Member".equals(role)) {
+        } else if ("Family Member".equals(role) || "Parent Admin".equals(role)) {
             if (user.getPersonId() == null) {
                 return Collections.emptyList();
             }
@@ -73,7 +73,7 @@ public class TreeService {
         } else if ("Family Head".equals(role)) {
             tree = treeRepository.findByIdAndOwnerId(treeId, userId)
                     .orElseThrow(() -> new ResourceNotFoundException("Tree not found or access denied"));
-        } else if ("Family Member".equals(role)) {
+        } else if ("Family Member".equals(role) || "Parent Admin".equals(role)) {
             if (user.getPersonId() == null) {
                 throw new BadRequestException("User profile not linked to any member");
             }
@@ -95,8 +95,8 @@ public class TreeService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         String role = owner.getRole() != null ? owner.getRole().getName() : "";
-        if ("Family Member".equals(role)) {
-            throw new BadRequestException("Family Members cannot create new family trees");
+        if ("Family Member".equals(role) || "Parent Admin".equals(role)) {
+            throw new BadRequestException("Family Members and Parent Admins cannot create new family trees");
         }
 
         FamilyTree tree = FamilyTree.builder()
@@ -126,13 +126,54 @@ public class TreeService {
         treeRepository.delete(tree);
     }
 
+    @Transactional
+    public TreeResponse updateView(Long treeId, String view, Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        String role = user.getRole() != null ? user.getRole().getName() : "";
+        FamilyTree tree;
+        if ("System Owner".equals(role)) {
+            tree = treeRepository.findById(treeId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Tree not found"));
+        } else if ("Family Head".equals(role)) {
+            tree = treeRepository.findByIdAndOwnerId(treeId, userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Tree not found or access denied"));
+        } else {
+            throw new BadRequestException("Only System Owners or Family Heads can change family tree view settings");
+        }
+
+        if (!"yes".equals(view) && !"no".equals(view)) {
+            throw new BadRequestException("Invalid view value. Must be 'yes' or 'no'");
+        }
+
+        tree.setView(view);
+        return mapToResponse(treeRepository.save(tree));
+    }
+
     private TreeResponse mapToResponse(FamilyTree tree) {
         return TreeResponse.builder()
                 .id(tree.getId())
                 .name(tree.getName())
                 .ownerId(tree.getOwner().getId())
                 .createdAt(tree.getCreatedAt())
+                .view(tree.getView())
                 .build();
+    }
+
+    public List<TreeResponse> getPublicTrees() {
+        return treeRepository.findAllByView("yes").stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public TreeResponse getPublicTree(Long id) {
+        FamilyTree tree = treeRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Tree not found"));
+        if (!"yes".equals(tree.getView())) {
+            throw new ResourceNotFoundException("Tree is not public");
+        }
+        return mapToResponse(tree);
     }
 
     public List<Map<String, Object>> getInvitations(Long treeId, Long userId) {

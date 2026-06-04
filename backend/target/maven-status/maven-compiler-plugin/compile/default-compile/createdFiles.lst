@@ -49,6 +49,7 @@ com/familytree/dto/request/RegisterRequest.class
 com/familytree/model/PasswordResetToken.class
 com/familytree/dto/response/PersonResponse$ComputedRelationshipDto.class
 com/familytree/model/FamilyTree$FamilyTreeBuilder.class
+com/familytree/controller/PublicTreeController.class
 com/familytree/service/AuthService.class
 com/familytree/controller/RoleController$UserDto.class
 com/familytree/model/Relationship$RelationshipBuilder.class

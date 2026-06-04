@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { usePersons } from '../hooks/usePersons';
-import { Search as SearchIcon, Calendar, ArrowRight, X } from 'lucide-react';
+import { Search as SearchIcon, Calendar, ArrowRight, X, Flame } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import DecompressedImage from '../components/DecompressedImage';
 
@@ -98,14 +98,19 @@ const Search: React.FC = () => {
             >
               <div className="flex items-center gap-4">
                 <div
-                  className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl"
+                  className={`flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl ${person.deathDate ? 'grayscale opacity-75' : ''}`}
                   style={{ background: '#f7f4ef', border: '1px solid #e8e0d0' }}
                 >
                   <DecompressedImage photoUrl={person.photoUrl} fallbackIconSize={22} className="w-full h-full object-cover" />
                 </div>
                 <div>
-                  <h3 className="font-bold transition-colors" style={{ color: '#2d3a2a' }}>
-                    {person.firstName} {person.lastName}
+                  <h3 className="font-bold transition-colors flex items-center gap-1" style={{ color: '#2d3a2a' }}>
+                    <span>{person.firstName} {person.lastName}</span>
+                    {person.deathDate && (
+                      <span title="Deceased" className="flex shrink-0">
+                        <Flame size={12} className="text-amber-600 fill-amber-300" />
+                      </span>
+                    )}
                   </h3>
                   <p className="mt-1 flex items-center gap-1 text-xs" style={{ color: '#a09080' }}>
                     <Calendar size={12} />

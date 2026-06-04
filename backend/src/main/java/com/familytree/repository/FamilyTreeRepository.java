@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface FamilyTreeRepository extends JpaRepository<FamilyTree, Long> {
     List<FamilyTree> findAllByOwnerId(Long ownerId);
     Optional<FamilyTree> findByIdAndOwnerId(Long id, Long ownerId);
+    List<FamilyTree> findAllByView(String view);
 }

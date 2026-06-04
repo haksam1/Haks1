@@ -20,6 +20,7 @@ export interface FamilyTree {
   name: string;
   ownerId: number;
   createdAt: string;
+  view: string;
 }
 
 export interface Person {

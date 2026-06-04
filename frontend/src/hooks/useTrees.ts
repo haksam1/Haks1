@@ -16,10 +16,19 @@ export const useTrees = () => {
     },
   });
 
-  const useGet = (id?: number) => useQuery({
-    queryKey: ['trees', id],
+  const usePublicList = () => useQuery({
+    queryKey: ['public-trees'],
     queryFn: async () => {
-      const { data } = await api.get<FamilyTree>(`/api/trees/${id}`);
+      const { data } = await api.get<FamilyTree[]>('/api/public/trees');
+      return data;
+    },
+  });
+
+  const useGet = (id?: number, isPublic: boolean = false) => useQuery({
+    queryKey: [isPublic ? 'public-trees' : 'trees', id],
+    queryFn: async () => {
+      const url = isPublic ? `/api/public/trees/${id}` : `/api/trees/${id}`;
+      const { data } = await api.get<FamilyTree>(url);
       return data;
     },
     enabled: !!id,
@@ -46,6 +55,23 @@ export const useTrees = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['trees'] });
+      queryClient.invalidateQueries({ queryKey: ['public-trees'] });
+    },
+  });
+
+  const updateViewMutation = useMutation({
+    mutationFn: async ({ id, view }: { id: number; view: string }) => {
+      const { data } = await api.put<FamilyTree>(`/api/trees/${id}/view`, { view });
+      return data;
+    },
+    onSuccess: (updatedTree) => {
+      queryClient.setQueryData<FamilyTree[]>(['trees'], (trees) => {
+        if (!trees) return [updatedTree];
+        return trees.map((tree) => (tree.id === updatedTree.id ? updatedTree : tree));
+      });
+      queryClient.invalidateQueries({ queryKey: ['trees'] });
+      queryClient.invalidateQueries({ queryKey: ['trees', updatedTree.id] });
+      queryClient.invalidateQueries({ queryKey: ['public-trees'] });
     },
   });
 
@@ -90,5 +116,25 @@ export const useTrees = () => {
     }
   };
 
-  return { useList, useGet, create, delete: remove };
+  const updateView = async (id: number, view: string) => {
+    const toastId = toast.loading('Updating family settings', 'Saving view settings...');
+    try {
+      const tree = await updateViewMutation.mutateAsync({ id, view });
+      toast.updateToast(toastId, {
+        title: 'Settings saved',
+        message: `${tree.name} is now ${view === 'yes' ? 'public' : 'private'}.`,
+        variant: 'success',
+      });
+      return tree;
+    } catch (error) {
+      toast.updateToast(toastId, {
+        title: 'Could not update settings',
+        message: getApiErrorMessage(error, 'Unable to update the family view settings. Please try again.'),
+        variant: 'error',
+      });
+      throw error;
+    }
+  };
+
+  return { useList, usePublicList, useGet, create, delete: remove, updateView };
 };

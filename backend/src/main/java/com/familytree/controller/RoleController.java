@@ -62,9 +62,9 @@ public class RoleController {
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found"));
         
-        // Prevent deleting System Admin or Parent Admin easily
-        if ("System Admin".equalsIgnoreCase(role.getName()) || "Parent Admin".equalsIgnoreCase(role.getName())) {
-            throw new IllegalArgumentException("Cannot delete default System or Parent Admin roles.");
+        // Prevent deleting System Owner easily
+        if ("System Owner".equalsIgnoreCase(role.getName())) {
+            throw new IllegalArgumentException("Cannot delete default System Owner role.");
         }
 
         roleRepository.delete(role);

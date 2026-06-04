@@ -11,19 +11,21 @@ export const usePersons = (treeId?: number) => {
   const getPersonName = (person: Person) =>
     `${person.firstName} ${person.lastName}`.trim() || 'Family member';
 
-  const useList = () => useQuery({
-    queryKey: ['persons', treeId],
+  const useList = (isPublic: boolean = false) => useQuery({
+    queryKey: [isPublic ? 'public-persons' : 'persons', treeId],
     queryFn: async () => {
-      const { data } = await api.get<Person[]>(`/api/trees/${treeId}/persons`);
+      const url = isPublic ? `/api/public/trees/${treeId}/persons` : `/api/trees/${treeId}/persons`;
+      const { data } = await api.get<Person[]>(url);
       return data;
     },
     enabled: !!treeId,
   });
 
-  const useGet = (personId?: number) => useQuery({
-    queryKey: ['persons', treeId, personId],
+  const useGet = (personId?: number, isPublic: boolean = false) => useQuery({
+    queryKey: [isPublic ? 'public-persons' : 'persons', treeId, personId],
     queryFn: async () => {
-      const { data } = await api.get<Person>(`/api/trees/${treeId}/persons/${personId}`);
+      const url = isPublic ? `/api/public/trees/${treeId}/persons/${personId}` : `/api/trees/${treeId}/persons/${personId}`;
+      const { data } = await api.get<Person>(url);
       return data;
     },
     enabled: !!treeId && !!personId,

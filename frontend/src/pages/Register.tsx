@@ -4,13 +4,17 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { ArrowLeft, ArrowRight, Eye, EyeOff, User, Mail, Lock } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, EyeOff, User, Mail, Lock, Calendar, Phone } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 
 const registerSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
+  firstName: z.string().min(2, 'First name must be at least 2 characters'),
+  lastName: z.string().min(2, 'Last name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
+  gender: z.string().min(1, 'Gender is required'),
+  birthDate: z.string().min(1, 'Birth date is required'),
+  phoneNumber: z.string().min(1, 'Phone number is required'),
 });
 
 type RegisterForm = z.infer<typeof registerSchema>;
@@ -45,7 +49,16 @@ const Register: React.FC = () => {
 
   const onSubmit = async (data: RegisterForm) => {
     try {
-      await registerUser(data);
+      await registerUser({
+        name: `${data.firstName} ${data.lastName}`,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        password: data.password,
+        gender: data.gender,
+        birthDate: data.birthDate,
+        phoneNumber: data.phoneNumber,
+      });
       navigate('/dashboard');
     } catch (err) {
       setError('root', { message: getRegistrationErrorMessage(err) });
@@ -76,7 +89,7 @@ const Register: React.FC = () => {
         <div className="pointer-events-none absolute right-0 top-0 z-0 h-[400px] w-[400px] rounded-full bg-[#2d6a4f]/10 blur-3xl" />
         <div className="pointer-events-none absolute bottom-0 left-0 z-0 h-[450px] w-[450px] rounded-full bg-[#d4c9b0]/20 blur-3xl" />
 
-        <div className="relative z-10 w-full max-w-md space-y-8">
+        <div className="relative z-10 w-full max-w-xl space-y-8">
           <div className="text-center">
             <Link to="/" className="inline-flex items-center gap-2 font-bold text-2xl mb-6">
               <BrandLogo markClassName="h-24 w-56" />
@@ -91,22 +104,97 @@ const Register: React.FC = () => {
           </div>
 
           <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Full Name</label>
+                <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>First Name</label>
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5" style={{ color: '#a09080' }}>
                     <User size={18} />
                   </div>
                   <input
-                    {...register('name')}
+                    {...register('firstName')}
                     type="text"
-                    className="block w-full rounded-xl py-3 pl-10 pr-4 text-sm outline-none transition-all duration-200"
-                    style={{ background: '#fff', border: '1.5px solid #e8e0d0', color: '#2d3a2a' }}
-                    placeholder="John Doe"
+                    className="block w-full rounded-xl py-3 pl-10 pr-4 text-sm outline-none border-[1.5px] border-[#e8e0d0] focus:border-[#2d6a4f] transition-all duration-200"
+                    style={{ background: '#fff', color: '#2d3a2a' }}
+                    placeholder="John"
                   />
                 </div>
-                {errors.name && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.name.message}</p>}
+                {errors.firstName && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.firstName.message}</p>}
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Last Name</label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5" style={{ color: '#a09080' }}>
+                    <User size={18} />
+                  </div>
+                  <input
+                    {...register('lastName')}
+                    type="text"
+                    className="block w-full rounded-xl py-3 pl-10 pr-4 text-sm outline-none border-[1.5px] border-[#e8e0d0] focus:border-[#2d6a4f] transition-all duration-200"
+                    style={{ background: '#fff', color: '#2d3a2a' }}
+                    placeholder="Doe"
+                  />
+                </div>
+                {errors.lastName && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.lastName.message}</p>}
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Birth Date</label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5" style={{ color: '#a09080' }}>
+                    <Calendar size={18} />
+                  </div>
+                  <input
+                    {...register('birthDate')}
+                    type="date"
+                    className="block w-full rounded-xl py-3 pl-10 pr-4 text-sm outline-none border-[1.5px] border-[#e8e0d0] focus:border-[#2d6a4f] transition-all duration-200"
+                    style={{ background: '#fff', color: '#2d3a2a' }}
+                  />
+                </div>
+                {errors.birthDate && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.birthDate.message}</p>}
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Gender</label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5" style={{ color: '#a09080' }}>
+                    <User size={18} />
+                  </div>
+                  <select
+                    {...register('gender')}
+                    className="block w-full rounded-xl py-3 pl-10 pr-10 text-sm outline-none border-[1.5px] border-[#e8e0d0] focus:border-[#2d6a4f] transition-all duration-200 appearance-none bg-no-repeat bg-white"
+                    style={{ background: '#fff', color: '#2d3a2a' }}
+                  >
+                    <option value="">Select Gender</option>
+                    <option value="MALE">Male</option>
+                    <option value="FEMALE">Female</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5" style={{ color: '#a09080' }}>
+                    <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                    </svg>
+                  </div>
+                </div>
+                {errors.gender && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.gender.message}</p>}
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Phone Number</label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5" style={{ color: '#a09080' }}>
+                    <Phone size={18} />
+                  </div>
+                  <input
+                    {...register('phoneNumber')}
+                    type="tel"
+                    className="block w-full rounded-xl py-3 pl-10 pr-4 text-sm outline-none border-[1.5px] border-[#e8e0d0] focus:border-[#2d6a4f] transition-all duration-200"
+                    style={{ background: '#fff', color: '#2d3a2a' }}
+                    placeholder="+1 555-019-2834"
+                  />
+                </div>
+                {errors.phoneNumber && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.phoneNumber.message}</p>}
               </div>
 
               <div>
@@ -118,15 +206,15 @@ const Register: React.FC = () => {
                   <input
                     {...register('email')}
                     type="email"
-                    className="block w-full rounded-xl py-3 pl-10 pr-4 text-sm outline-none transition-all duration-200"
-                    style={{ background: '#fff', border: '1.5px solid #e8e0d0', color: '#2d3a2a' }}
+                    className="block w-full rounded-xl py-3 pl-10 pr-4 text-sm outline-none border-[1.5px] border-[#e8e0d0] focus:border-[#2d6a4f] transition-all duration-200"
+                    style={{ background: '#fff', color: '#2d3a2a' }}
                     placeholder="you@example.com"
                   />
                 </div>
                 {errors.email && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.email.message}</p>}
               </div>
 
-              <div>
+              <div className="sm:col-span-2">
                 <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Password</label>
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5" style={{ color: '#a09080' }}>
@@ -135,8 +223,8 @@ const Register: React.FC = () => {
                   <input
                     {...register('password')}
                     type={showPassword ? 'text' : 'password'}
-                    className="block w-full rounded-xl py-3 pl-10 pr-12 text-sm outline-none transition-all duration-200"
-                    style={{ background: '#fff', border: '1.5px solid #e8e0d0', color: '#2d3a2a' }}
+                    className="block w-full rounded-xl py-3 pl-10 pr-12 text-sm outline-none border-[1.5px] border-[#e8e0d0] focus:border-[#2d6a4f] transition-all duration-200"
+                    style={{ background: '#fff', color: '#2d3a2a' }}
                     placeholder="Min. 6 characters"
                   />
                   <button

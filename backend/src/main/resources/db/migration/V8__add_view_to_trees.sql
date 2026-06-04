@@ -1,0 +1,1 @@
+ALTER TABLE family_trees ADD COLUMN view VARCHAR(10) DEFAULT 'no' NOT NULL;

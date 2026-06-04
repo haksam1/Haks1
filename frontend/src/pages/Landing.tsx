@@ -1,9 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { TreePine, Users, ArrowRight, ShieldCheck, Heart, Sparkles } from 'lucide-react';
+import { TreePine, Users, ArrowRight, ShieldCheck, Heart, Sparkles, Calendar } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
+import { useTrees } from '../hooks/useTrees';
 
 const Landing: React.FC = () => {
+  const { usePublicList } = useTrees();
+  const { data: publicTrees } = usePublicList();
+
   return (
     <div className="min-h-screen overflow-hidden bg-[#f7f4ef]" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       {/* Decorative Glow Elements */}
@@ -115,6 +119,60 @@ const Landing: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Public Family Trees Section */}
+        {publicTrees && publicTrees.length > 0 && (
+          <div className="mt-24">
+            <div className="text-center max-w-3xl mx-auto mb-12 space-y-4">
+              <h2 className="text-3xl font-bold tracking-tight md:text-4xl" style={{ color: '#1a3a2a', fontFamily: "'Playfair Display', Georgia, serif" }}>
+                Explore Public Family Trees
+              </h2>
+              <p className="text-lg" style={{ color: '#5a4a3a' }}>
+                Discover public family stories and legacies shared by our community.
+              </p>
+            </div>
+
+            <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+              {publicTrees.map((tree) => (
+                <div
+                  key={tree.id}
+                  className="group flex flex-col justify-between rounded-2xl bg-white p-8 shadow-sm transition-all duration-300 hover:shadow-xl"
+                  style={{ border: '1px solid #e8e0d0' }}
+                >
+                  <div>
+                    <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e8f5ee] text-[#2d6a4f] transition-transform duration-300 group-hover:scale-110">
+                      <TreePine size={28} />
+                    </div>
+                    <h3 className="mb-3 text-xl font-bold" style={{ color: '#1a3a2a', fontFamily: "'Playfair Display', Georgia, serif" }}>
+                      {tree.name}
+                    </h3>
+                    <p className="flex items-center gap-2 text-xs mb-6" style={{ color: '#a09080' }}>
+                      <Calendar size={12} />
+                      <span>
+                        Created{' '}
+                        {new Date(tree.createdAt).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="pt-6 border-t" style={{ borderColor: '#f0ece4' }}>
+                    <Link
+                      to={`/public-trees/${tree.id}`}
+                      className="group/link flex items-center gap-1.5 text-sm font-semibold transition-all"
+                      style={{ color: '#2d6a4f' }}
+                    >
+                      <span>Explore Tree</span>
+                      <ArrowRight size={14} className="transition-transform duration-200 group-hover/link:translate-x-1" />
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Features Section */}
         <div className="mt-32">

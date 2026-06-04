@@ -29,6 +29,10 @@ public class FamilyTree {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(nullable = false, length = 10)
+    @Builder.Default
+    private String view = "no";
+
     @Builder.Default
     @OneToMany(mappedBy = "tree", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Person> persons = new ArrayList<>();
