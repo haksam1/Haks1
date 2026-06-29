@@ -23,4 +23,17 @@ public class PersonRequest {
     private String phoneNumber;
     private String email;
     private String photoUrl;
+
+    // Refactored fields
+    private String relationshipType;
+    private Long relatedPersonId;
+    private Boolean alive;
+
+    // Living child details
+    private String childFirstName;
+    private String childLastName;
+    private String childEmail;
+    private String childPhoneNumber;
+    private LocalDate childBirthDate;
+    private String childGender;
 }

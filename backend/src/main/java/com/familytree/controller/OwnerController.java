@@ -132,23 +132,26 @@ public class OwnerController {
             smsQueueRepository.save(sms);
         }
 
-        String emailSubject = "Invitation to join " + tree.getName();
-        String emailMessage = String.format(
-                "Hello %s,\n\nYou have been added to the family tree: %s.\n\n" +
-                "Please log in with the following temporary credentials:\n" +
-                "Email: %s\n" +
-                "Temporary Password: %s\n\n" +
-                "You will be asked to change this password on your first login.\n\n" +
-                "Best regards,\nKinCore Family Tree",
-                person.getFirstName(), tree.getName(), person.getEmail(), tempPassword
-        );
-        PendingEmailAndMessage pendingEmail = PendingEmailAndMessage.builder()
-                .email(person.getEmail())
-                .subject(emailSubject)
-                .message(emailMessage)
-                .status("PENDING")
-                .build();
-        pendingEmailAndMessageRepository.save(pendingEmail);
+        if (person.getEmail() != null && !person.getEmail().isBlank()) {
+            String emailSubject = "Invitation to join " + tree.getName();
+            String emailMessage = String.format(
+                    "Hello %s,\n\n" +
+                    "You have been added to the family tree: %s.\n\n" +
+                    "Please log in with the following temporary credentials:\n" +
+                    "Email: %s\n" +
+                    "Temporary Password: %s\n\n" +
+                    "You will be asked to change this password on your first login.\n\n" +
+                    "Best regards,\nKinCore Family Tree",
+                    person.getFirstName(), tree.getName(), person.getEmail(), tempPassword
+            );
+            PendingEmailAndMessage pendingEmail = PendingEmailAndMessage.builder()
+                    .email(person.getEmail())
+                    .subject(emailSubject)
+                    .message(emailMessage)
+                    .status("PENDING")
+                    .build();
+            pendingEmailAndMessageRepository.save(pendingEmail);
+        }
 
         return ResponseEntity.ok(Map.of(
                 "status", "success",

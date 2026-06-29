@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.time.LocalDate;
 import java.util.stream.Collectors;
 
 @Service
@@ -29,6 +30,9 @@ public class PersonService {
     private final SmsQueueRepository smsQueueRepository;
     private final PendingEmailAndMessageRepository pendingEmailAndMessageRepository;
     private final PasswordEncoder passwordEncoder;
+    private final FamilyRepository familyRepository;
+    private final MarriageRepository marriageRepository;
+    private final PersonPhotoRepository personPhotoRepository;
 
     public List<PersonResponse> getAllByTree(Long treeId, Long userId) {
         FamilyTree tree = validateAccess(treeId, userId);
@@ -71,6 +75,82 @@ public class PersonService {
         return mapToResponse(person, allPersons);
     }
 
+    private boolean isParentRelationship(String type) {
+        return "FATHER".equalsIgnoreCase(type) || "MOTHER".equalsIgnoreCase(type);
+    }
+
+    private boolean isGrandparentRelationship(String type) {
+        return "GRANDFATHER".equalsIgnoreCase(type) || "GRANDMOTHER".equalsIgnoreCase(type)
+                || "PATERNAL_GRANDFATHER".equalsIgnoreCase(type) || "PATERNAL_GRANDMOTHER".equalsIgnoreCase(type)
+                || "MATERNAL_GRANDFATHER".equalsIgnoreCase(type) || "MATERNAL_GRANDMOTHER".equalsIgnoreCase(type);
+    }
+
+    private void sendCredentials(FamilyTree tree, Person person, String emailAddress) {
+        if (emailAddress == null || emailAddress.isBlank()) {
+            return;
+        }
+        if (userRepository.existsByEmail(emailAddress)) {
+            return;
+        }
+
+        String tempPassword = "Temp" + java.util.UUID.randomUUID().toString().substring(0, 8) + "!";
+        Role familyMemberRole = roleRepository.findByName("Family Member")
+                .orElseThrow(() -> new IllegalStateException("Family Member role not found"));
+        
+        User newUser = User.builder()
+                .name(person.getFirstName() + " " + person.getLastName())
+                .email(emailAddress)
+                .password(passwordEncoder.encode(tempPassword))
+                .role(familyMemberRole)
+                .personId(person.getId())
+                .isTemporaryPassword(true)
+                .isActive(false)
+                .build();
+        userRepository.save(newUser);
+
+        Invitation invitation = Invitation.builder()
+                .tree(tree)
+                .person(person)
+                .email(emailAddress)
+                .phoneNumber(person.getPhoneNumber())
+                .tempPassword(tempPassword)
+                .status("PENDING")
+                .expiresAt(java.time.LocalDateTime.now().plusDays(7))
+                .build();
+        invitationRepository.save(invitation);
+
+        if (person.getPhoneNumber() != null && !person.getPhoneNumber().isBlank()) {
+            String smsMessage = String.format(
+                    "Welcome to KinCore! You've been added to %s. Log in with Email: %s , Temp Password: %s",
+                    tree.getName(), emailAddress, tempPassword
+            );
+            SmsQueue sms = SmsQueue.builder()
+                    .phoneNumber(person.getPhoneNumber())
+                    .message(smsMessage)
+                    .status("PENDING")
+                    .build();
+            smsQueueRepository.save(sms);
+        }
+
+        String emailSubject = "Invitation to join " + tree.getName();
+        String emailMessage = String.format(
+                "Hello %s,\n\nYou have been added to the family tree: %s.\n\n" +
+                "Please log in with the following temporary credentials:\n" +
+                "Email: %s\n" +
+                "Temporary Password: %s\n\n" +
+                "You will be asked to change this password on your first login.\n\n" +
+                "Best regards,\nKinCore Family Tree",
+                person.getFirstName(), tree.getName(), emailAddress, tempPassword
+        );
+        PendingEmailAndMessage pendingEmail = PendingEmailAndMessage.builder()
+                .email(emailAddress)
+                .subject(emailSubject)
+                .message(emailMessage)
+                .status("PENDING")
+                .build();
+        pendingEmailAndMessageRepository.save(pendingEmail);
+    }
+
     @Transactional
     public PersonResponse create(Long treeId, PersonRequest req, Long userId) {
         FamilyTree tree = validateAccess(treeId, userId);
@@ -108,62 +188,138 @@ public class PersonService {
                 .build();
         Person saved = personRepository.save(person);
 
-        if (req.getEmail() != null && !req.getEmail().isBlank()) {
-            String tempPassword = "Temp" + java.util.UUID.randomUUID().toString().substring(0, 8) + "!";
-            Role familyMemberRole = roleRepository.findByName("Family Member")
-                    .orElseThrow(() -> new IllegalStateException("Family Member role not found"));
-            User newUser = User.builder()
-                    .name(saved.getFirstName() + " " + saved.getLastName())
-                    .email(saved.getEmail())
-                    .password(passwordEncoder.encode(tempPassword))
-                    .role(familyMemberRole)
-                    .personId(saved.getId())
-                    .isTemporaryPassword(true)
-                    .isActive(false)
-                    .build();
-            userRepository.save(newUser);
+        String relType = req.getRelationshipType();
+        Long relPersonId = req.getRelatedPersonId();
 
-            Invitation invitation = Invitation.builder()
-                    .tree(tree)
-                    .person(saved)
-                    .email(saved.getEmail())
-                    .phoneNumber(saved.getPhoneNumber())
-                    .tempPassword(tempPassword)
-                    .status("PENDING")
-                    .expiresAt(java.time.LocalDateTime.now().plusDays(7))
-                    .build();
-            invitationRepository.save(invitation);
+        if (relType != null && !relType.trim().isEmpty() && relPersonId != null) {
+            Person targetPerson = personRepository.findById(relPersonId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Related person not found"));
+            boolean isParent = isParentRelationship(relType);
+            boolean isGrandparent = isGrandparentRelationship(relType);
+            boolean isAlive = req.getAlive() != null ? req.getAlive() : (req.getDeathDate() == null);
 
-            if (saved.getPhoneNumber() != null && !saved.getPhoneNumber().isBlank()) {
-                String smsMessage = String.format(
-                        "Welcome to KinCore! You've been added to %s. Log in with Email: %s , Temp Password: %s",
-                        tree.getName(), saved.getEmail(), tempPassword
-                );
-                SmsQueue sms = SmsQueue.builder()
-                        .phoneNumber(saved.getPhoneNumber())
-                        .message(smsMessage)
-                        .status("PENDING")
-                        .build();
-                smsQueueRepository.save(sms);
+            if (isParent) {
+                RelationshipRequest relReq = new RelationshipRequest();
+                relReq.setRelatedPersonId(relPersonId);
+                relReq.setType(relType);
+                addRelationship(treeId, saved.getId(), relReq, userId);
+
+                if (isAlive) {
+                    sendCredentials(tree, saved, req.getEmail());
+                } else {
+                    if (req.getChildFirstName() != null && !req.getChildFirstName().trim().isEmpty()) {
+                        Person child = Person.builder()
+                                .tree(tree)
+                                .firstName(req.getChildFirstName())
+                                .lastName(req.getChildLastName())
+                                .birthDate(req.getChildBirthDate())
+                                .gender(req.getChildGender())
+                                .phoneNumber(req.getChildPhoneNumber())
+                                .email(req.getChildEmail())
+                                .createdBy(userId)
+                                .modifyPermission("SELF_AND_ADMIN")
+                                .build();
+                        Person savedChild = personRepository.save(child);
+
+                        RelationshipRequest relChildReq = new RelationshipRequest();
+                        relChildReq.setRelatedPersonId(savedChild.getId());
+                        relChildReq.setType("CHILD");
+                        addRelationship(treeId, saved.getId(), relChildReq, userId);
+
+                        RelationshipRequest sibReq = new RelationshipRequest();
+                        sibReq.setRelatedPersonId(targetPerson.getId());
+                        sibReq.setType("SIBLING");
+                        addRelationship(treeId, savedChild.getId(), sibReq, userId);
+
+                        sendCredentials(tree, savedChild, req.getChildEmail());
+                    }
+                }
+            } else if (isGrandparent) {
+                boolean isPaternal = relType.toUpperCase().contains("PATERNAL") || relType.equalsIgnoreCase("GRANDFATHER") || relType.equalsIgnoreCase("GRANDMOTHER");
+                
+                Person parentNode = null;
+                String parentGender = isPaternal ? "MALE" : "FEMALE";
+                
+                for (Relationship rel : targetPerson.getRelationships()) {
+                    if (rel.getType() == Relationship.RelationshipType.PARENT) {
+                        Person p = rel.getRelatedPerson();
+                        if (parentGender.equalsIgnoreCase(p.getGender())) {
+                            parentNode = p;
+                            break;
+                        }
+                    }
+                }
+                
+                if (parentNode == null) {
+                    String defaultLastName = targetPerson.getLastName();
+                    String defaultFirstName = (isPaternal ? "Father" : "Mother") + " of " + targetPerson.getFirstName();
+                    LocalDate birthDate = targetPerson.getBirthDate() != null ? targetPerson.getBirthDate().minusYears(25) : LocalDate.of(1970, 1, 1);
+                    
+                    Person placeholder = Person.builder()
+                            .tree(tree)
+                            .firstName(defaultFirstName)
+                            .lastName(defaultLastName)
+                            .birthDate(birthDate)
+                            .gender(parentGender)
+                            .bio("Placeholder profile for " + (isPaternal ? "Father" : "Mother"))
+                            .createdBy(userId)
+                            .modifyPermission("SELF_AND_ADMIN")
+                            .build();
+                    parentNode = personRepository.save(placeholder);
+                    
+                    RelationshipRequest relReq = new RelationshipRequest();
+                    relReq.setRelatedPersonId(parentNode.getId());
+                    relReq.setType(isPaternal ? "FATHER" : "MOTHER");
+                    addRelationship(treeId, targetPerson.getId(), relReq, userId);
+                }
+
+                RelationshipRequest gpRelReq = new RelationshipRequest();
+                gpRelReq.setRelatedPersonId(parentNode.getId());
+                gpRelReq.setType(relType.toUpperCase().contains("GRANDMOTHER") ? "MOTHER" : "FATHER");
+                addRelationship(treeId, saved.getId(), gpRelReq, userId);
+
+                if (isAlive) {
+                    sendCredentials(tree, saved, req.getEmail());
+                } else {
+                    if (req.getChildFirstName() != null && !req.getChildFirstName().trim().isEmpty()) {
+                        Person child = Person.builder()
+                                .tree(tree)
+                                .firstName(req.getChildFirstName())
+                                .lastName(req.getChildLastName())
+                                .birthDate(req.getChildBirthDate())
+                                .gender(req.getChildGender())
+                                .phoneNumber(req.getChildPhoneNumber())
+                                .email(req.getChildEmail())
+                                .createdBy(userId)
+                                .modifyPermission("SELF_AND_ADMIN")
+                                .build();
+                        Person savedChild = personRepository.save(child);
+
+                        RelationshipRequest relChildReq = new RelationshipRequest();
+                        relChildReq.setRelatedPersonId(savedChild.getId());
+                        relChildReq.setType("CHILD");
+                        addRelationship(treeId, saved.getId(), relChildReq, userId);
+
+                        if (parentGender.equalsIgnoreCase(savedChild.getGender())) {
+                            RelationshipRequest parentRelReq = new RelationshipRequest();
+                            parentRelReq.setRelatedPersonId(savedChild.getId());
+                            parentRelReq.setType(isPaternal ? "FATHER" : "MOTHER");
+                            addRelationship(treeId, targetPerson.getId(), parentRelReq, userId);
+                        }
+
+                        sendCredentials(tree, savedChild, req.getChildEmail());
+                    }
+                }
+            } else {
+                RelationshipRequest relReq = new RelationshipRequest();
+                relReq.setRelatedPersonId(relPersonId);
+                relReq.setType(relType);
+                addRelationship(treeId, saved.getId(), relReq, userId);
             }
-
-            String emailSubject = "Invitation to join " + tree.getName();
-            String emailMessage = String.format(
-                    "Hello %s,\n\nYou have been added to the family tree: %s.\n\n" +
-                    "Please log in with the following temporary credentials:\n" +
-                    "Email: %s\n" +
-                    "Temporary Password: %s\n\n" +
-                    "You will be asked to change this password on your first login.\n\n" +
-                    "Best regards,\nKinCore Family Tree",
-                    saved.getFirstName(), tree.getName(), saved.getEmail(), tempPassword
-            );
-            PendingEmailAndMessage pendingEmail = PendingEmailAndMessage.builder()
-                    .email(saved.getEmail())
-                    .subject(emailSubject)
-                    .message(emailMessage)
-                    .status("PENDING")
-                    .build();
-            pendingEmailAndMessageRepository.save(pendingEmail);
+        } else {
+            if (req.getEmail() != null && !req.getEmail().isBlank()) {
+                sendCredentials(tree, saved, req.getEmail());
+            }
         }
 
         activityLogRepository.save(ActivityLog.builder()
@@ -238,6 +394,17 @@ public class PersonService {
         if (!isAdmin && !isOwner) {
             throw new BadRequestException("Only System Owners or the Family Head who created the tree can delete family members.");
         }
+
+        userRepository.findByPersonId(personId)
+                .ifPresent(userRepository::delete);
+
+        invitationRepository.deleteByPersonId(personId);
+        marriageRepository.deleteByPerson1IdOrPerson2Id(personId, personId);
+        relationshipRepository.deleteByPersonIdOrRelatedPersonId(personId, personId);
+        personPhotoRepository.deleteByPersonId(personId);
+
+        person.getFamilies().clear();
+        personRepository.saveAndFlush(person);
 
         personRepository.delete(person);
 
@@ -346,6 +513,8 @@ public class PersonService {
             relationshipRepository.save(reverse);
             relatedPerson.getRelationships().add(reverse);
         }
+
+        updateFamilyAssociationsAfterRelationship(person, relatedPerson, directType, req.getMarriageDate());
 
         activityLogRepository.save(ActivityLog.builder()
                 .userId(userId)
@@ -694,5 +863,108 @@ public class PersonService {
             }
         }
         return list;
+    }
+
+    private void updateFamilyAssociationsAfterRelationship(Person person, Person relatedPerson, Relationship.RelationshipType type, java.time.LocalDate marriageDate) {
+        if (type == Relationship.RelationshipType.SPOUSE) {
+            // 1. Save Marriage Entity
+            if (marriageRepository.findMarriageBetween(person.getId(), relatedPerson.getId()).isEmpty()) {
+                Marriage marriage = Marriage.builder()
+                        .person1(person)
+                        .person2(relatedPerson)
+                        .marriageDate(marriageDate != null ? marriageDate : java.time.LocalDate.now())
+                        .build();
+                marriageRepository.save(marriage);
+            }
+
+            // 2. Link spouses to the same family or create a combined family record if needed
+            java.util.Set<Family> pFamilies = new java.util.HashSet<>(person.getFamilies());
+            java.util.Set<Family> rFamilies = new java.util.HashSet<>(relatedPerson.getFamilies());
+
+            if (pFamilies.isEmpty() && rFamilies.isEmpty()) {
+                // Create new combined family
+                String famName = getFamilyName(person, relatedPerson);
+                Family family = familyRepository.save(Family.builder().name(famName).build());
+                person.getFamilies().add(family);
+                relatedPerson.getFamilies().add(family);
+            } else if (!pFamilies.isEmpty() && rFamilies.isEmpty()) {
+                // Link relatedPerson to person's families
+                relatedPerson.getFamilies().addAll(pFamilies);
+            } else if (pFamilies.isEmpty() && !rFamilies.isEmpty()) {
+                // Link person to relatedPerson's families
+                person.getFamilies().addAll(rFamilies);
+            } else {
+                // Both have families. Create a combined family record and link both to it,
+                // and link both to each other's existing families as well to unify them
+                String famName = getFamilyName(person, relatedPerson);
+                Family combined = familyRepository.save(Family.builder().name(famName).build());
+                person.getFamilies().add(combined);
+                relatedPerson.getFamilies().add(combined);
+                person.getFamilies().addAll(rFamilies);
+                relatedPerson.getFamilies().addAll(pFamilies);
+            }
+
+            personRepository.save(person);
+            personRepository.save(relatedPerson);
+
+        } else if (type == Relationship.RelationshipType.PARENT || type == Relationship.RelationshipType.CHILD) {
+            Person parent = (type == Relationship.RelationshipType.PARENT) ? person : relatedPerson;
+            Person child = (type == Relationship.RelationshipType.PARENT) ? relatedPerson : person;
+
+            // Ensure parent has at least one family
+            if (parent.getFamilies().isEmpty()) {
+                String famName = parent.getLastName() + " Family";
+                Family family = familyRepository.save(Family.builder().name(famName).build());
+                parent.getFamilies().add(family);
+                personRepository.save(parent);
+            }
+
+            // Get all families of parent
+            java.util.Set<Family> parentFamilies = new java.util.HashSet<>(parent.getFamilies());
+
+            // Also check for any spouses of the parent (the other parent)
+            for (Relationship rel : parent.getRelationships()) {
+                if (rel.getType() == Relationship.RelationshipType.SPOUSE) {
+                    Person spouse = rel.getRelatedPerson();
+                    parentFamilies.addAll(spouse.getFamilies());
+                }
+            }
+
+            // Link child to all these families
+            child.getFamilies().addAll(parentFamilies);
+            personRepository.save(child);
+
+        } else if (type == Relationship.RelationshipType.SIBLING) {
+            // Siblings share same families
+            java.util.Set<Family> pFamilies = new java.util.HashSet<>(person.getFamilies());
+            java.util.Set<Family> rFamilies = new java.util.HashSet<>(relatedPerson.getFamilies());
+
+            if (pFamilies.isEmpty() && rFamilies.isEmpty()) {
+                String famName = person.getLastName() + " Family";
+                Family family = familyRepository.save(Family.builder().name(famName).build());
+                person.getFamilies().add(family);
+                relatedPerson.getFamilies().add(family);
+            } else {
+                person.getFamilies().addAll(rFamilies);
+                relatedPerson.getFamilies().addAll(pFamilies);
+            }
+
+            personRepository.save(person);
+            personRepository.save(relatedPerson);
+        }
+    }
+
+    private String getFamilyName(Person p1, Person p2) {
+        String ln1 = p1.getLastName() != null ? p1.getLastName().trim() : "";
+        String ln2 = p2.getLastName() != null ? p2.getLastName().trim() : "";
+        if (ln1.isEmpty() && ln2.isEmpty()) {
+            return "Combined Family";
+        }
+        if (ln1.equalsIgnoreCase(ln2)) {
+            return ln1 + " Family";
+        }
+        if (ln1.isEmpty()) return ln2 + " Family";
+        if (ln2.isEmpty()) return ln1 + " Family";
+        return ln1 + " & " + ln2 + " Family";
     }
 }

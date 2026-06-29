@@ -217,7 +217,7 @@ public class DashboardAndRolesIntegrationTest {
             personService.update(tree2.getId(), personHead2.getId(), editReq, headUser1.getId());
         });
 
-        // 3. Family Head 1 cannot edit another member's profile in their own tree -> throws BadRequestException
+        // 3. Family Head 1 can edit another member's profile in their own tree
         PersonRequest childReq = new PersonRequest();
         childReq.setFirstName("ChildOfHead1");
         childReq.setLastName("One");
@@ -225,9 +225,8 @@ public class DashboardAndRolesIntegrationTest {
         childReq.setGender("MALE");
         PersonResponse child = personService.create(tree1.getId(), childReq, headUser1.getId());
 
-        assertThrows(BadRequestException.class, () -> {
-            personService.update(tree1.getId(), child.getId(), editReq, headUser1.getId());
-        });
+        PersonResponse updatedChild = personService.update(tree1.getId(), child.getId(), editReq, headUser1.getId());
+        assertEquals("Hacked", updatedChild.getFirstName());
 
         // 3. System Owner can view and edit tree 2
         List<PersonResponse> peopleInTree2 = personService.getAllByTree(tree2.getId(), adminUser.getId());

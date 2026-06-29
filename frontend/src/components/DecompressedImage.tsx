@@ -22,9 +22,11 @@ const DecompressedImage: React.FC<DecompressedImageProps> = ({
   const [error, setError] = useState<boolean>(false);
   const imageUrl = photoUrl ? getApiResourceUrl(photoUrl) : '';
   const isCompressedImage = Boolean(photoUrl && !photoUrl.startsWith('data:') && photoUrl.toLowerCase().endsWith('.gz'));
+  const isDatabaseImage = Boolean(photoUrl && photoUrl.startsWith('/api/upload/photo/'));
+  const needsLoading = isCompressedImage || isDatabaseImage;
 
   useEffect(() => {
-    if (!photoUrl || !isCompressedImage) {
+    if (!photoUrl || !needsLoading) {
       return;
     }
 
@@ -41,12 +43,20 @@ const DecompressedImage: React.FC<DecompressedImageProps> = ({
       }
 
       try {
-        const response = await api.get(photoUrl, { responseType: 'arraybuffer' });
-        const decompressed = await decompressGzipArrayBuffer(response.data);
-        
-        if (active) {
-          decompressedCache[imageUrl] = decompressed;
-          setDecompressedImage({ url: imageUrl, src: decompressed });
+        if (isDatabaseImage) {
+          const response = await api.get<string>(photoUrl);
+          const base64Data = response.data;
+          if (active) {
+            decompressedCache[imageUrl] = base64Data;
+            setDecompressedImage({ url: imageUrl, src: base64Data });
+          }
+        } else {
+          const response = await api.get(photoUrl, { responseType: 'arraybuffer' });
+          const decompressed = await decompressGzipArrayBuffer(response.data);
+          if (active) {
+            decompressedCache[imageUrl] = decompressed;
+            setDecompressedImage({ url: imageUrl, src: decompressed });
+          }
         }
       } catch (err) {
         console.error('Failed to load or decompress image:', err);
@@ -65,9 +75,9 @@ const DecompressedImage: React.FC<DecompressedImageProps> = ({
     return () => {
       active = false;
     };
-  }, [imageUrl, isCompressedImage, photoUrl]);
+  }, [imageUrl, needsLoading, photoUrl, isDatabaseImage]);
 
-  if (!photoUrl || (isCompressedImage && error)) {
+  if (!photoUrl || ((isCompressedImage || isDatabaseImage) && error)) {
     return (
       <div className={`flex items-center justify-center bg-[#f7f4ef] text-[#a09080] ${className}`}>
         <User size={fallbackIconSize} />
@@ -75,7 +85,7 @@ const DecompressedImage: React.FC<DecompressedImageProps> = ({
     );
   }
 
-  if (!isCompressedImage) {
+  if (!isCompressedImage && !isDatabaseImage) {
     return <img src={imageUrl} className={className} alt="" {...props} />;
   }
 

@@ -14,6 +14,7 @@ spring:
       mail:
         smtp:
           auth: true
+          from: ${MAIL_USERNAME:kincore123@gmail.com}
           starttls:
             enable: true
             required: true

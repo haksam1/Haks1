@@ -21,6 +21,8 @@ export interface FamilyTree {
   ownerId: number;
   createdAt: string;
   view: string;
+  memberPhotos?: string[];
+  memberCount?: number;
 }
 
 export interface Person {

@@ -2,11 +2,12 @@ package com.familytree.service;
 
 import com.familytree.model.PendingEmailAndMessage;
 import com.familytree.repository.PendingEmailAndMessageRepository;
+import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,7 +45,7 @@ public class EmailQueueScheduler {
         for (PendingEmailAndMessage email : pendingEmails) {
             try {
                 // If using the default unconfigured placeholder credentials, fall back to console logging immediately
-                if (mailHost == null || mailHost.isBlank()) {
+                if (isPlaceholderCredentials()) {
                     log.warn("SMTP credentials are using default placeholders. Simulating email delivery for ID: {}", email.getId());
                     logSimulatedEmail(email);
                     email.setStatus("SENT");
@@ -74,16 +75,27 @@ public class EmailQueueScheduler {
         }
     }
 
-    private void sendRealEmail(PendingEmailAndMessage email) {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(email.getEmail());
-        message.setSubject(email.getSubject());
-        message.setText(email.getMessage());
+    private boolean isPlaceholderCredentials() {
+        return mailHost == null || mailHost.isBlank()
+                || "your-email@gmail.com".equals(fromEmail);
+    }
+
+    private void sendRealEmail(PendingEmailAndMessage email) throws Exception {
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "UTF-8");
+
+        helper.setTo(email.getEmail());
+        helper.setSubject(email.getSubject());
+        helper.setText(email.getMessage());
 
         String senderEmail = (fromEmail != null && !fromEmail.isBlank()) ? fromEmail : "no-reply@familytree.com";
-        message.setFrom(String.format("%s <%s>", mailDisplayName, senderEmail));
+        helper.setFrom(String.format("\"%s\" <%s>", mailDisplayName, senderEmail));
 
-        mailSender.send(message);
+        // Add standard transactional headers to prevent spam flags
+        mimeMessage.setHeader("Auto-Submitted", "auto-generated");
+        mimeMessage.setHeader("X-Auto-Response-Suppress", "All");
+
+        mailSender.send(mimeMessage);
     }
 
     private void logSimulatedEmail(PendingEmailAndMessage email) {

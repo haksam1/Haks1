@@ -8,6 +8,7 @@ import api from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { getApiErrorMessage } from '../lib/errors';
 import { FamilyTree } from '../types';
+import DecompressedImage from '../components/DecompressedImage';
 import {
   Plus, TreePine, Trash2, Calendar, ArrowRight,
   Users, Search, X, Leaf, GitBranch, Mail, Send, Phone,
@@ -548,7 +549,20 @@ const TreeCard: React.FC<TreeCardProps> = ({ tree, onDelete, isDeleting, current
   const [isTogglingView, setIsTogglingView] = useState(false);
   const { updateView } = useTrees();
 
+  const photos = tree.memberPhotos || [];
+  const hasPhotos = photos.length > 0;
   const isOwner = currentUserId === tree.ownerId;
+
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+
+  React.useEffect(() => {
+    if (photos.length <= 1) return;
+    const interval = window.setInterval(() => {
+      setCurrentPhotoIndex((prev) => (prev + 1) % photos.length);
+    }, 6000);
+
+    return () => window.clearInterval(interval);
+  }, [photos.length]);
 
   const handleToggleView = async () => {
     setIsTogglingView(true);
@@ -564,10 +578,10 @@ const TreeCard: React.FC<TreeCardProps> = ({ tree, onDelete, isDeleting, current
 
   return (
     <div
-      className="group relative flex flex-col overflow-hidden rounded-2xl transition-all duration-400"
+      className="group relative z-10 flex flex-col overflow-hidden rounded-2xl transition-all duration-400 min-h-[300px]"
       style={{
-        background: '#ffffff',
-        border: '1px solid #e8e0d0',
+        background: hasPhotos ? 'transparent' : '#ffffff',
+        border: hasPhotos ? '1px solid #2d5040' : '1px solid #e8e0d0',
         boxShadow: hovered ? '0 20px 40px -12px rgba(13,34,24,0.15)' : '0 1px 3px rgba(0,0,0,0.04)',
         transform: hovered ? 'translateY(-3px)' : 'translateY(0)',
         transition: 'box-shadow 0.3s ease, transform 0.3s ease',
@@ -575,65 +589,122 @@ const TreeCard: React.FC<TreeCardProps> = ({ tree, onDelete, isDeleting, current
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
+      {/* Background Slideshow */}
+      {hasPhotos && (
+        <div className="absolute inset-0 -z-10 w-full h-full overflow-hidden">
+          {/* Overlay */}
+          <div className="absolute inset-0 bg-[#091a11]/75 z-10 backdrop-blur-[1px] transition-colors duration-300 group-hover:bg-[#091a11]/65" />
+          
+          {photos.map((photoUrl, idx) => (
+            <DecompressedImage
+              key={`${photoUrl}-${idx}`}
+              photoUrl={photoUrl}
+              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${idx === currentPhotoIndex ? 'opacity-100' : 'opacity-0'}`}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Top color band */}
-      <div
-        className="h-1 w-full transition-all duration-500"
-        style={{
-          background: hovered
-            ? 'linear-gradient(90deg, #2d6a4f, #95d5b2)'
-            : 'linear-gradient(90deg, #1a3a2a, #2d6a4f)',
-        }}
-      />
+      {!hasPhotos && (
+        <div
+          className="h-1 w-full transition-all duration-500"
+          style={{
+            background: hovered
+              ? 'linear-gradient(90deg, #2d6a4f, #95d5b2)'
+              : 'linear-gradient(90deg, #1a3a2a, #2d6a4f)',
+          }}
+        />
+      )}
 
       <div className="flex flex-1 flex-col p-6">
         {/* Icon */}
         <div
           className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl transition-all duration-300"
           style={{
-            background: hovered ? '#e8f5ee' : '#f0f7f2',
+            background: hasPhotos ? 'rgba(255, 255, 255, 0.15)' : (hovered ? '#e8f5ee' : '#f0f7f2'),
+            color: hasPhotos ? '#95d5b2' : '#2d6a4f',
+            border: hasPhotos ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
           }}
         >
-          <TreePine size={22} style={{ color: '#2d6a4f' }} />
+          <TreePine size={22} style={{ color: hasPhotos ? '#95d5b2' : '#2d6a4f' }} />
         </div>
 
-        {/* Name */}
-        <h3
-          className="mb-2 text-xl font-bold leading-snug transition-colors duration-200"
-          style={{
-            color: hovered ? '#1a3a2a' : '#2d3a2a',
-            fontFamily: "'Playfair Display', Georgia, serif",
-          }}
-        >
-          {tree.name}
-        </h3>
+        {/* Glassmorphic Metadata Overlay */}
+        {hasPhotos ? (
+          <div className="mb-5 p-5 rounded-2xl bg-black/45 border border-white/15 backdrop-blur-md space-y-2.5 shadow-lg">
+            <h3
+              className="text-2xl font-bold leading-snug text-white drop-shadow-md"
+              style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
+            >
+              {tree.name}
+            </h3>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[#95d5b2] font-semibold drop-shadow-sm">
+              <p className="flex items-center gap-1.5">
+                <Calendar size={13} className="text-[#95d5b2]" />
+                <span>
+                  {new Date(tree.createdAt).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </span>
+              </p>
+              <p className="flex items-center gap-1.5 border-l border-white/10 pl-4">
+                <Users size={13} className="text-[#95d5b2]" />
+                <span>
+                  {tree.memberCount !== undefined ? `${tree.memberCount} member${tree.memberCount === 1 ? '' : 's'}` : '0 members'}
+                </span>
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Name */}
+            <h3
+              className="mb-2 text-xl font-bold leading-snug transition-colors duration-200"
+              style={{
+                color: hovered ? '#1a3a2a' : '#2d3a2a',
+                fontFamily: "'Playfair Display', Georgia, serif",
+              }}
+            >
+              {tree.name}
+            </h3>
 
-        {/* Meta */}
-        <div className="mb-5 space-y-1.5">
-          <p className="flex items-center gap-2 text-xs" style={{ color: '#a09080' }}>
-            <Calendar size={12} />
-            Created{' '}
-            {new Date(tree.createdAt).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
-          </p>
-          <p className="flex items-center gap-2 text-xs" style={{ color: '#a09080' }}>
-            <Users size={12} />
-            0 members · Growing
-          </p>
-        </div>
+            {/* Meta */}
+            <div className="mb-5 space-y-1.5">
+              <p className="flex items-center gap-2 text-xs" style={{ color: '#a09080' }}>
+                <Calendar size={12} />
+                Created{' '}
+                {new Date(tree.createdAt).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </p>
+              <p className="flex items-center gap-2 text-xs" style={{ color: '#a09080' }}>
+                <Users size={12} />
+                {tree.memberCount !== undefined ? `${tree.memberCount} member${tree.memberCount === 1 ? '' : 's'}` : '0 members'} · Growing
+              </p>
+            </div>
+          </>
+        )}
 
         {/* Divider */}
-        <div className="mt-auto pt-4" style={{ borderTop: '1px solid #f0ece4' }}>
+        <div 
+          className="mt-auto pt-4" 
+          style={{ borderTop: hasPhotos ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid #f0ece4' }}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Link
                 to={`/trees/${tree.id}`}
                 className="group/link flex items-center gap-1.5 text-sm font-semibold transition-all"
-                style={{ color: '#2d6a4f' }}
+                style={{ color: hasPhotos ? '#95d5b2' : '#2d6a4f' }}
               >
-                <span>Explore</span>
+                <span className={hasPhotos ? 'text-white group-hover/link:text-[#95d5b2] transition-colors' : ''}>
+                  Explore
+                </span>
                 <ArrowRight size={14} className="transition-transform duration-200 group-hover/link:translate-x-1" />
               </Link>
 
@@ -644,9 +715,9 @@ const TreeCard: React.FC<TreeCardProps> = ({ tree, onDelete, isDeleting, current
                   disabled={isTogglingView}
                   className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm transition-all duration-200 disabled:opacity-60 cursor-pointer"
                   style={{
-                    backgroundColor: tree.view === 'yes' ? '#e8f5ee' : '#f0ece4',
-                    border: tree.view === 'yes' ? '1px solid #c8e6d0' : '1px solid #e8e0d0',
-                    color: tree.view === 'yes' ? '#2d6a4f' : '#8a7a6a',
+                    backgroundColor: tree.view === 'yes' ? (hasPhotos ? 'rgba(232, 245, 238, 0.2)' : '#e8f5ee') : (hasPhotos ? 'rgba(255, 255, 255, 0.1)' : '#f0ece4'),
+                    border: tree.view === 'yes' ? (hasPhotos ? '1px solid rgba(149, 213, 178, 0.3)' : '1px solid #c8e6d0') : (hasPhotos ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid #e8e0d0'),
+                    color: tree.view === 'yes' ? '#95d5b2' : (hasPhotos ? '#a8b8a8' : '#8a7a6a'),
                   }}
                   title={tree.view === 'yes' ? 'Make tree private' : 'Publish tree to home page'}
                 >
@@ -673,14 +744,14 @@ const TreeCard: React.FC<TreeCardProps> = ({ tree, onDelete, isDeleting, current
               onClick={onDelete}
               disabled={isDeleting}
               className="flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-200 disabled:opacity-50"
-              style={{ color: '#c8bfaa' }}
+              style={{ color: hasPhotos ? '#a8b8a8' : '#c8bfaa' }}
               onMouseEnter={(e) => {
                 (e.currentTarget as HTMLButtonElement).style.background = '#fef2f2';
                 (e.currentTarget as HTMLButtonElement).style.color = '#dc2626';
               }}
               onMouseLeave={(e) => {
                 (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-                (e.currentTarget as HTMLButtonElement).style.color = '#c8bfaa';
+                (e.currentTarget as HTMLButtonElement).style.color = hasPhotos ? '#a8b8a8' : '#c8bfaa';
               }}
               title="Delete family"
             >

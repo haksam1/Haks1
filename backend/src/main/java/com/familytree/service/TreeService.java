@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class TreeService {
 
     private final FamilyTreeRepository treeRepository;
@@ -123,6 +124,13 @@ public class TreeService {
         } else {
             throw new BadRequestException("Only System Owners or Family Heads can delete family trees");
         }
+
+        List<Person> persons = personRepository.findAllByTreeId(treeId);
+        for (Person p : persons) {
+            userRepository.findByPersonId(p.getId())
+                    .ifPresent(userRepository::delete);
+        }
+
         treeRepository.delete(tree);
     }
 
@@ -152,12 +160,20 @@ public class TreeService {
     }
 
     private TreeResponse mapToResponse(FamilyTree tree) {
+        List<String> photos = tree.getPersons() != null ? tree.getPersons().stream()
+                .map(Person::getPhotoUrl)
+                .filter(url -> url != null && !url.isBlank())
+                .collect(Collectors.toList()) : List.of();
+        int count = tree.getPersons() != null ? tree.getPersons().size() : 0;
+
         return TreeResponse.builder()
                 .id(tree.getId())
                 .name(tree.getName())
                 .ownerId(tree.getOwner().getId())
                 .createdAt(tree.getCreatedAt())
                 .view(tree.getView())
+                .memberPhotos(photos)
+                .memberCount(count)
                 .build();
     }
 
@@ -235,16 +251,18 @@ public class TreeService {
             smsQueueRepository.save(sms);
         }
 
-        String emailSubject = "Invitation to join " + tree.getName();
-        String emailMessage = String.format(
-                "Hello %s,\n\nYou have been added to the family tree: %s.\n\n" +
-                "Please log in with the following temporary credentials:\n" +
-                "Email: %s\n" +
-                "Temporary Password: %s\n\n" +
-                "You will be asked to change this password on your first login.\n\n" +
-                "Best regards,\nKinCore Family Tree",
-                person.getFirstName(), tree.getName(), person.getEmail(), tempPassword
-            );
+        if (person.getEmail() != null && !person.getEmail().isBlank()) {
+            String emailSubject = "Invitation to join " + tree.getName();
+            String emailMessage = String.format(
+                    "Hello %s,\n\n" +
+                    "You have been added to the family tree: %s.\n\n" +
+                    "Please log in with the following temporary credentials:\n" +
+                    "Email: %s\n" +
+                    "Temporary Password: %s\n\n" +
+                    "You will be asked to change this password on your first login.\n\n" +
+                    "Best regards,\nKinCore Family Tree",
+                    person.getFirstName(), tree.getName(), person.getEmail(), tempPassword
+                );
             PendingEmailAndMessage pendingEmail = PendingEmailAndMessage.builder()
                     .email(person.getEmail())
                     .subject(emailSubject)
@@ -252,5 +270,6 @@ public class TreeService {
                     .status("PENDING")
                     .build();
             pendingEmailAndMessageRepository.save(pendingEmail);
+        }
     }
 }

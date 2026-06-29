@@ -46,6 +46,8 @@ public class ParentSetupController {
                             .password(passwordEncoder.encode(randomPassword))
                             .role(memberRole)
                             .personId(req.getPersonId())
+                            .isTemporaryPassword(true)
+                            .isActive(false)
                             .build();
                     return userRepository.save(newUser);
                 });

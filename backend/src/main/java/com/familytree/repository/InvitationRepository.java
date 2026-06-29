@@ -9,4 +9,5 @@ public interface InvitationRepository extends JpaRepository<Invitation, Long> {
     List<Invitation> findAllByTreeId(Long treeId);
     Optional<Invitation> findByPersonId(Long personId);
     Optional<Invitation> findByEmail(String email);
+    void deleteByPersonId(Long personId);
 }

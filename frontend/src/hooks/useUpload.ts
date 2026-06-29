@@ -16,18 +16,11 @@ export const useUpload = (treeId: number, personId: number) => {
         reader.readAsDataURL(file);
       });
 
-      const { compressToGzipBlob } = await import('../lib/compression');
-      const gzipBlob = await compressToGzipBlob(base64DataUrl);
-
-      const formData = new FormData();
-      formData.append('file', gzipBlob, 'photo.gz');
-      formData.append('treeId', treeId.toString());
-      formData.append('personId', personId.toString());
-
-      const { data } = await api.post<{ url: string }>('/api/upload/photo', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+      const { data } = await api.post<{ url: string }>('/api/upload/photo', {
+        treeId,
+        personId,
+        base64Data: base64DataUrl,
+        filename: file.name,
       });
       return data;
     },

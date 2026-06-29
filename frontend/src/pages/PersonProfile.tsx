@@ -4,10 +4,87 @@ import { usePersons } from '../hooks/usePersons';
 import { useUpload } from '../hooks/useUpload';
 import { useAuthContext } from '../context/AuthContext';
 import DecompressedImage from '../components/DecompressedImage';
-import { Calendar, Camera, Trash2, Edit2, ArrowLeft, Heart, Users, ScrollText, Flame, Mail, Phone } from 'lucide-react';
+import { Calendar, Camera, Trash2, Edit2, ArrowLeft, Heart, Users, ScrollText, Flame, Mail, Phone, ChevronDown } from 'lucide-react';
 import { useTrees } from '../hooks/useTrees';
+import type { ComputedRelationship } from '../types';
 
 const profileBackgroundImage = '/images/d34bb4775f0b3a5d53edac6dcb4b8377.jpg';
+
+type RelationshipCategoryId =
+  | 'parents'
+  | 'children'
+  | 'siblings'
+  | 'spouses'
+  | 'grandparents'
+  | 'grandchildren'
+  | 'aunts'
+  | 'uncles'
+  | 'cousins'
+  | 'nieces-nephews'
+  | 'other-relatives';
+
+type RelationshipCategory = {
+  id: RelationshipCategoryId;
+  title: string;
+};
+
+type RelationshipGroup = RelationshipCategory & {
+  relationships: ComputedRelationship[];
+};
+
+const relationshipCategories: RelationshipCategory[] = [
+  { id: 'parents', title: 'Parents' },
+  { id: 'children', title: 'Children' },
+  { id: 'siblings', title: 'Siblings' },
+  { id: 'spouses', title: 'Spouses' },
+  { id: 'grandparents', title: 'Grandparents' },
+  { id: 'grandchildren', title: 'Grandchildren' },
+  { id: 'aunts', title: 'Aunts' },
+  { id: 'uncles', title: 'Uncles' },
+  { id: 'cousins', title: 'Cousins' },
+  { id: 'nieces-nephews', title: 'Nieces & Nephews' },
+  { id: 'other-relatives', title: 'Other Relatives' },
+];
+
+const spouseRelationshipLabels = new Set(['wife', 'husband', 'spouse']);
+
+const getRelationshipCategoryId = (typeLabel: string): RelationshipCategoryId => {
+  const label = typeLabel.trim().toLowerCase();
+
+  if (['mother', 'father', 'parent'].includes(label)) return 'parents';
+  if (['daughter', 'son', 'child'].includes(label)) return 'children';
+  if (['sister', 'brother', 'sibling'].includes(label)) return 'siblings';
+  if (spouseRelationshipLabels.has(label)) return 'spouses';
+  if (['grandmother', 'grandfather', 'grandparent'].includes(label)) return 'grandparents';
+  if (['granddaughter', 'grandson', 'grandchild'].includes(label)) return 'grandchildren';
+  if (label === 'aunt') return 'aunts';
+  if (label === 'uncle') return 'uncles';
+  if (label === 'cousin') return 'cousins';
+  if (['niece', 'nephew', 'nephew/niece', 'niece/nephew'].includes(label)) return 'nieces-nephews';
+
+  return 'other-relatives';
+};
+
+const createRelationshipGroups = (relationships: ComputedRelationship[]): RelationshipGroup[] => {
+  const groups = relationshipCategories.reduce<Record<RelationshipCategoryId, ComputedRelationship[]>>(
+    (acc, category) => {
+      acc[category.id] = [];
+      return acc;
+    },
+    {} as Record<RelationshipCategoryId, ComputedRelationship[]>
+  );
+
+  relationships.forEach((relationship) => {
+    groups[getRelationshipCategoryId(relationship.typeLabel)].push(relationship);
+  });
+
+  return relationshipCategories
+    .map((category) => ({
+      ...category,
+      relationships: groups[category.id],
+    }))
+    .filter((group) => group.relationships.length > 0);
+};
 
 const PersonProfile: React.FC = () => {
   const { treeId, personId } = useParams();
@@ -32,6 +109,18 @@ const PersonProfile: React.FC = () => {
     if (!person) return [];
     return person.computedRelationships || [];
   }, [person]);
+
+  const relationshipGroups = React.useMemo(
+    () => createRelationshipGroups(computedRelationships),
+    [computedRelationships]
+  );
+  const [expandedRelationshipSelection, setExpandedRelationshipSelection] = React.useState<{
+    personId?: string;
+    categoryId: RelationshipCategoryId | null;
+  }>({ personId, categoryId: null });
+  const expandedRelationshipCategory =
+    expandedRelationshipSelection.personId === personId ? expandedRelationshipSelection.categoryId : null;
+  const expandedRelationshipGroup = relationshipGroups.find((group) => group.id === expandedRelationshipCategory);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -180,7 +269,7 @@ const PersonProfile: React.FC = () => {
             </div>
 
             {/* Profile Grid (Bio & Relationships) */}
-            <div className="mt-10 grid gap-8 border-t pt-8 lg:grid-cols-[minmax(0,2fr)_360px]" style={{ borderColor: '#f0ece4' }}>
+            <div className="mt-10 grid gap-8 border-t pt-8 lg:grid-cols-[minmax(0,1fr)_minmax(500px,1fr)] xl:grid-cols-[minmax(0,1fr)_minmax(560px,1fr)]" style={{ borderColor: '#f0ece4' }}>
               {/* Biography Section */}
               <div className="space-y-6">
                 <div className="space-y-4">
@@ -235,42 +324,125 @@ const PersonProfile: React.FC = () => {
                 </h3>
                 
                 <div className="space-y-3">
-                  {computedRelationships.map((rel) => {
-                    return (
-                      <Link 
-                        key={rel.relatedPersonId} 
-                        to={isPublic ? `/public-trees/${treeId}/persons/${rel.relatedPersonId}` : `/trees/${treeId}/persons/${rel.relatedPersonId}`} 
-                        className="group flex items-center gap-3 rounded-2xl bg-white p-3.5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
-                        style={{ border: '1px solid #e8e0d0' }}
-                      >
-                        <div
-                          className={`h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl ${rel.deathDate ? 'grayscale opacity-75' : ''}`}
-                          style={{ background: '#f7f4ef', border: '1px solid #e8e0d0' }}
-                        >
-                          <DecompressedImage photoUrl={rel.photoUrl} fallbackIconSize={20} className="h-full w-full object-cover" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-bold transition-colors flex items-center gap-1" style={{ color: '#2d3a2a' }}>
-                            <span className="truncate">{rel.fullName}</span>
-                            {rel.deathDate && (
-                              <span title="Deceased" className="flex shrink-0">
-                                <Flame size={12} className="text-amber-600 fill-amber-300" />
+                  {relationshipGroups.length > 0 && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {relationshipGroups.map((group) => {
+                          const isExpanded = expandedRelationshipCategory === group.id;
+
+                          return (
+                            <button
+                              key={group.id}
+                              type="button"
+                              aria-expanded={isExpanded}
+                              aria-controls={`relationship-category-${group.id}`}
+                              onClick={() => {
+                                setExpandedRelationshipSelection({
+                                  personId,
+                                  categoryId: isExpanded ? null : group.id,
+                                });
+                              }}
+                              className="flex min-h-14 cursor-pointer items-center justify-between gap-2 rounded-xl px-3 py-2 text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm"
+                              style={{
+                                background: isExpanded ? '#e8f5ee' : '#fcfbf9',
+                                border: `1px solid ${isExpanded ? '#9bd2ad' : '#e8e0d0'}`,
+                                color: isExpanded ? '#1a3a2a' : '#5a4a3a',
+                              }}
+                            >
+                              <span className="min-w-0">
+                                <span className="block truncate text-xs font-bold">{group.title}</span>
+                                <span className="mt-0.5 block text-[10px] font-semibold" style={{ color: isExpanded ? '#2d6a4f' : '#a09080' }}>
+                                  {group.relationships.length} {group.relationships.length === 1 ? 'person' : 'people'}
+                                </span>
                               </span>
-                            )}
-                          </div>
-                          <div className="mt-1 flex items-center gap-1.5">
-                            <Heart size={12} className={['Wife', 'Husband', 'Spouse'].includes(rel.typeLabel) ? 'text-pink-500' : ''} style={['Wife', 'Husband', 'Spouse'].includes(rel.typeLabel) ? undefined : { color: '#2d6a4f' }} />
-                            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#a09080' }}>
-                              {rel.typeLabel}
-                            </span>
-                          </div>
-                          <p className="mt-1 truncate text-[11px]" style={{ color: '#a09080' }}>
-                            {rel.birthDate || 'Unknown'} - {rel.deathDate || 'Present'}
-                          </p>
+                              <span
+                                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white transition-transform duration-300"
+                                style={{ border: '1px solid #e8e0d0' }}
+                              >
+                                <ChevronDown
+                                  size={14}
+                                  className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+                                />
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div
+                        id={expandedRelationshipGroup ? `relationship-category-${expandedRelationshipGroup.id}` : undefined}
+                        className={`grid transition-all duration-300 ease-out ${
+                          expandedRelationshipGroup ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                        }`}
+                      >
+                        <div className="overflow-hidden">
+                          {expandedRelationshipGroup && (
+                            <div className="space-y-2 rounded-2xl bg-[#fcfbf9] p-3" style={{ border: '1px solid #e8e0d0' }}>
+                              <div className="flex items-center justify-between gap-3 px-1">
+                                <p className="truncate text-xs font-bold uppercase tracking-wider" style={{ color: '#2d6a4f' }}>
+                                  {expandedRelationshipGroup.title}
+                                </p>
+                                <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold" style={{ color: '#a09080', border: '1px solid #e8e0d0' }}>
+                                  {expandedRelationshipGroup.relationships.length}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                                {expandedRelationshipGroup.relationships.map((rel) => {
+                                  const isSpouse = spouseRelationshipLabels.has(rel.typeLabel.toLowerCase());
+
+                                  return (
+                                    <Link
+                                      key={rel.relatedPersonId}
+                                      to={isPublic ? `/public-trees/${treeId}/persons/${rel.relatedPersonId}` : `/trees/${treeId}/persons/${rel.relatedPersonId}`}
+                                      className="group min-w-0 rounded-xl bg-white p-2.5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
+                                      style={{ border: '1px solid #e8e0d0' }}
+                                    >
+                                      <div className="flex min-w-0 items-start gap-2">
+                                        <div
+                                          className={`h-9 w-9 flex-shrink-0 overflow-hidden rounded-lg ${rel.deathDate ? 'grayscale opacity-75' : ''}`}
+                                          style={{ background: '#f7f4ef', border: '1px solid #e8e0d0' }}
+                                        >
+                                          <DecompressedImage photoUrl={rel.photoUrl} fallbackIconSize={16} className="h-full w-full object-cover" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <div
+                                            className="flex items-center gap-1 truncate text-[13px] font-bold leading-tight transition-colors"
+                                            style={{ color: '#2d3a2a' }}
+                                            title={rel.fullName}
+                                          >
+                                            <span className="truncate">{rel.fullName}</span>
+                                            {rel.deathDate && (
+                                              <span title="Deceased" className="flex shrink-0">
+                                                <Flame size={11} className="text-amber-600 fill-amber-300" />
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="mt-1 flex min-w-0 items-center gap-1">
+                                            <Heart
+                                              size={11}
+                                              className={`shrink-0 ${isSpouse ? 'text-pink-500' : ''}`}
+                                              style={isSpouse ? undefined : { color: '#2d6a4f' }}
+                                            />
+                                            <span className="truncate text-[9px] font-bold uppercase tracking-wider" style={{ color: '#a09080' }}>
+                                              {rel.typeLabel}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <p className="mt-2 truncate text-[10px]" style={{ color: '#a09080' }}>
+                                        {rel.birthDate || 'Unknown'} - {rel.deathDate || 'Present'}
+                                      </p>
+                                    </Link>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </Link>
-                    );
-                  })}
+                      </div>
+                    </>
+                  )}
                   
                   {computedRelationships.length === 0 && (
                     <div className="rounded-2xl border border-dashed bg-[#f7f4ef] p-4 py-8 text-center" style={{ borderColor: '#d4c9b0' }}>

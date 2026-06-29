@@ -45,6 +45,18 @@ public class PersonServiceRefactoredTest {
     @Autowired
     private com.familytree.repository.RoleRepository roleRepository;
 
+    @Autowired
+    private com.familytree.repository.FamilyRepository familyRepository;
+
+    @Autowired
+    private com.familytree.repository.MarriageRepository marriageRepository;
+
+    @Autowired
+    private com.familytree.repository.PersonPhotoRepository personPhotoRepository;
+
+    @Autowired
+    private com.familytree.service.PhotoService photoService;
+
     private User testUser;
     private FamilyTree testTree;
 
@@ -264,4 +276,150 @@ public class PersonServiceRefactoredTest {
         assertTrue(cousinRel.isPresent());
         assertEquals("Cousin", cousinRel.get().getTypeLabel());
     }
+
+    @Test
+    void testImageCompressionAndDecompression() throws Exception {
+        // Create person
+        PersonRequest req = new PersonRequest();
+        req.setFirstName("ImgTest");
+        req.setLastName("User");
+        req.setBirthDate(LocalDate.of(2000, 1, 1));
+        req.setGender("MALE");
+        PersonResponse person = personService.create(testTree.getId(), req, testUser.getId());
+
+        // Base64 dummy image string
+        String originalBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        
+        com.familytree.dto.request.PhotoUploadRequest uploadReq = new com.familytree.dto.request.PhotoUploadRequest();
+        uploadReq.setTreeId(testTree.getId());
+        uploadReq.setPersonId(person.getId());
+        uploadReq.setBase64Data(originalBase64);
+        uploadReq.setFilename("test_dot.png");
+
+        // Upload and compress
+        String photoUrl = photoService.uploadPhoto(uploadReq, testUser.getId());
+        assertNotNull(photoUrl);
+        assertEquals("/api/upload/photo/" + person.getId(), photoUrl);
+
+        // Retrieve and decompress
+        String decompressed = photoService.getPhotoBase64(person.getId());
+        assertEquals(originalBase64, decompressed);
+
+        // Verify metadata in DB
+        Optional<com.familytree.model.PersonPhoto> photoOpt = personPhotoRepository.findByPersonId(person.getId());
+        assertTrue(photoOpt.isPresent());
+        com.familytree.model.PersonPhoto photo = photoOpt.get();
+        assertEquals("test_dot.png", photo.getFilename());
+        assertEquals("image/png", photo.getFormat());
+        assertTrue(photo.getSize() > 0);
+        assertNotNull(photo.getCompressedBlob());
+    }
+
+    @Test
+    void testFamilyMarriageAndChildAssociations() {
+        // Create spouses
+        PersonRequest husbandReq = new PersonRequest();
+        husbandReq.setFirstName("George");
+        husbandReq.setLastName("Smith");
+        husbandReq.setBirthDate(LocalDate.of(1980, 1, 1));
+        husbandReq.setGender("MALE");
+        PersonResponse husband = personService.create(testTree.getId(), husbandReq, testUser.getId());
+
+        PersonRequest wifeReq = new PersonRequest();
+        wifeReq.setFirstName("Martha");
+        wifeReq.setLastName("Jones");
+        wifeReq.setBirthDate(LocalDate.of(1982, 1, 1));
+        wifeReq.setGender("FEMALE");
+        PersonResponse wife = personService.create(testTree.getId(), wifeReq, testUser.getId());
+
+        // Marry them
+        RelationshipRequest marryReq = new RelationshipRequest();
+        marryReq.setRelatedPersonId(wife.getId());
+        marryReq.setType("SPOUSE");
+        marryReq.setMarriageDate(LocalDate.of(2010, 6, 15));
+        personService.addRelationship(testTree.getId(), husband.getId(), marryReq, testUser.getId());
+
+        // Verify Marriage record
+        Optional<com.familytree.model.Marriage> marriageOpt = marriageRepository.findMarriageBetween(husband.getId(), wife.getId());
+        assertTrue(marriageOpt.isPresent());
+        assertEquals(LocalDate.of(2010, 6, 15), marriageOpt.get().getMarriageDate());
+
+        // Spouses should be linked to the same family (combined family "Smith & Jones Family")
+        Person husbandEntity = personRepository.findById(husband.getId()).orElseThrow();
+        Person wifeEntity = personRepository.findById(wife.getId()).orElseThrow();
+        assertFalse(husbandEntity.getFamilies().isEmpty());
+        assertFalse(wifeEntity.getFamilies().isEmpty());
+        
+        // They should share at least one family
+        boolean sharesFamily = husbandEntity.getFamilies().stream()
+                .anyMatch(f -> wifeEntity.getFamilies().contains(f));
+        assertTrue(sharesFamily);
+
+        // Create a child
+        PersonRequest childReq = new PersonRequest();
+        childReq.setFirstName("Tommy");
+        childReq.setLastName("Smith");
+        childReq.setBirthDate(LocalDate.of(2015, 1, 1));
+        childReq.setGender("MALE");
+        PersonResponse child = personService.create(testTree.getId(), childReq, testUser.getId());
+
+        // Link child to father
+        RelationshipRequest childRel = new RelationshipRequest();
+        childRel.setRelatedPersonId(husband.getId());
+        childRel.setType("FATHER");
+        personService.addRelationship(testTree.getId(), child.getId(), childRel, testUser.getId());
+
+        // Tommy should automatically inherit the family associations of both parents (since George is married to Martha)
+        Person tommyEntity = personRepository.findById(child.getId()).orElseThrow();
+        assertFalse(tommyEntity.getFamilies().isEmpty());
+        
+        // Tommy's families should contain George's families
+        boolean inheritsFatherFamily = husbandEntity.getFamilies().stream()
+                .allMatch(f -> tommyEntity.getFamilies().contains(f));
+        assertTrue(inheritsFatherFamily);
+
+        // Tommy's families should also contain Martha's families because Martha is George's spouse
+        boolean inheritsMotherFamily = wifeEntity.getFamilies().stream()
+                .allMatch(f -> tommyEntity.getFamilies().contains(f));
+        assertTrue(inheritsMotherFamily);
+    }
+
+    @Test
+    void testDeletePerson_CascadesToUser() {
+        // Create a person with an email address to trigger user auto-provisioning
+        PersonRequest req = new PersonRequest();
+        req.setFirstName("DeleteMe");
+        req.setLastName("User");
+        req.setBirthDate(LocalDate.of(1990, 1, 1));
+        req.setGender("MALE");
+        req.setEmail("deleteme@example.com");
+
+        // Verify role "Family Member" exists, or create one for test
+        roleRepository.findByName("Family Member")
+                .orElseGet(() -> roleRepository.save(com.familytree.model.Role.builder()
+                        .name("Family Member")
+                        .permissions(java.util.Set.of("view_dashboard"))
+                        .build()));
+
+        PersonResponse person = personService.create(testTree.getId(), req, testUser.getId());
+        assertNotNull(person.getId());
+
+        // Verify User was created and linked to the Person
+        Optional<User> associatedUserOpt = userRepository.findByPersonId(person.getId());
+        assertTrue(associatedUserOpt.isPresent());
+        User associatedUser = associatedUserOpt.get();
+        assertEquals("deleteme@example.com", associatedUser.getEmail());
+
+        // Now delete the person
+        personService.delete(testTree.getId(), person.getId(), testUser.getId());
+
+        // Verify Person was deleted
+        Optional<Person> deletedPersonOpt = personRepository.findById(person.getId());
+        assertTrue(deletedPersonOpt.isEmpty());
+
+        // Verify User was deleted cascadingly
+        Optional<User> deletedUserOpt = userRepository.findByPersonId(person.getId());
+        assertTrue(deletedUserOpt.isEmpty());
+    }
 }
+
