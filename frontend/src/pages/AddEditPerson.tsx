@@ -21,7 +21,9 @@ const personSchema = z.object({
   email: z.string().email('Invalid email address').optional().or(z.literal('')),
   relatedPersonId: z.string().optional().or(z.literal('')),
   relationshipType: z.string().optional().or(z.literal('')),
+  secondParentId: z.string().optional().or(z.literal('')),
   alive: z.boolean(),
+  isParent: z.boolean().optional(),
   childFirstName: z.string().optional(),
   childLastName: z.string().optional(),
   childEmail: z.string().optional(),
@@ -29,38 +31,28 @@ const personSchema = z.object({
   childGender: z.string().optional(),
   childBirthDate: z.string().optional(),
 }).superRefine((data, ctx) => {
-  if (data.relationshipType && data.relationshipType !== '') {
-    if (!data.relatedPersonId || data.relatedPersonId === '') {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Please select a family member to connect to',
-        path: ['relatedPersonId'],
-      });
-    }
+  // If we are connecting to a parent or partner, relatedPersonId must be provided
+  if ((data.relationshipType === 'CHILD' || data.relationshipType === 'SPOUSE') && (!data.relatedPersonId || data.relatedPersonId === '')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please choose a relative to connect to',
+      path: ['relatedPersonId'],
+    });
   }
 
-  const isParentOrGp = [
-    'FATHER',
-    'MOTHER',
-    'PATERNAL_GRANDFATHER',
-    'PATERNAL_GRANDMOTHER',
-    'MATERNAL_GRANDFATHER',
-    'MATERNAL_GRANDMOTHER'
-  ].includes(data.relationshipType || '');
-
-  // If alive and parent/grandparent, email is required
-  if (isParentOrGp && data.alive) {
+  // If alive and (child is parent OR spouse connection), email is required for credentials
+  if (data.alive && (data.isParent || data.relationshipType === 'SPOUSE')) {
     if (!data.email || data.email.trim() === '') {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Email address is required for credentials',
+        message: 'Email address is required to send login credentials',
         path: ['email'],
       });
     }
   }
 
-  // If deceased and parent/grandparent, child details are required
-  if (isParentOrGp && !data.alive) {
+  // If deceased and not the root ancestor (indicated by relationshipType being 'CHILD')
+  if (!data.alive && data.relationshipType === 'CHILD') {
     if (!data.childFirstName || data.childFirstName.trim() === '') {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -148,7 +140,9 @@ const AddEditPerson: React.FC = () => {
       email: person.email || '',
       relatedPersonId: existingRelation ? String(existingRelation.relatedPersonId) : (user?.role === 'Family Member' ? String(user.personId) : ''),
       relationshipType: existingRelType() || (user?.role === 'Family Member' ? 'CHILD' : ''),
+      secondParentId: '',
       alive: !person.deathDate,
+      isParent: false,
       childFirstName: '',
       childLastName: '',
       childEmail: '',
@@ -165,8 +159,10 @@ const AddEditPerson: React.FC = () => {
       phoneNumber: '',
       email: '',
       relatedPersonId: user?.role === 'Family Member' ? String(user.personId) : '',
-      relationshipType: user?.role === 'Family Member' ? 'CHILD' : '',
+      relationshipType: (!allPersons || allPersons.length === 0) ? '' : 'CHILD',
+      secondParentId: '',
       alive: true,
+      isParent: false,
       childFirstName: '',
       childLastName: '',
       childEmail: '',
@@ -179,23 +175,24 @@ const AddEditPerson: React.FC = () => {
   const relationshipType = watch('relationshipType');
   const relatedPersonId = watch('relatedPersonId');
   const alive = watch('alive');
+  const isParent = watch('isParent');
 
   const isEditingSelf = isEditing && Number(personId) === user?.personId;
-  const isFirstPerson = !isEditing && allPersons?.length === 1;
-  const isParentOrGpSelected = [
-    'FATHER',
-    'MOTHER',
-    'PATERNAL_GRANDFATHER',
-    'PATERNAL_GRANDMOTHER',
-    'MATERNAL_GRANDFATHER',
-    'MATERNAL_GRANDMOTHER'
-  ].includes(relationshipType || '');
+  const isRootAncestor = !isEditing && (!allPersons || allPersons.length === 0);
+  const isSubsequentPerson = !isEditing && allPersons && allPersons.length > 0;
+  const isAutoConnectToRoot = !isEditing && allPersons?.length === 1;
 
   React.useEffect(() => {
-    if (isFirstPerson && allPersons && allPersons[0]) {
+    if (isAutoConnectToRoot && allPersons && allPersons[0]) {
       setValue('relatedPersonId', String(allPersons[0].id));
     }
-  }, [isFirstPerson, allPersons, setValue]);
+  }, [isAutoConnectToRoot, allPersons, setValue]);
+
+  React.useEffect(() => {
+    if (allPersons && allPersons.length > 0 && !isEditing) {
+      setValue('relationshipType', 'CHILD');
+    }
+  }, [allPersons, isEditing, setValue]);
 
   // Handle Photo Preview
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -223,7 +220,9 @@ const AddEditPerson: React.FC = () => {
       email: data.email || '',
       relationshipType: data.relationshipType || '',
       relatedPersonId: data.relatedPersonId ? Number(data.relatedPersonId) : null,
+      secondParentId: data.secondParentId ? Number(data.secondParentId) : null,
       alive: data.alive,
+      isParent: data.isParent || false,
       childFirstName: data.childFirstName || '',
       childLastName: data.childLastName || '',
       childEmail: data.childEmail || '',
@@ -263,6 +262,22 @@ const AddEditPerson: React.FC = () => {
   // Filter out the current person from related person list
   const filteredPersonsList = allPersons?.filter(p => !isEditing || p.id !== Number(personId)) || [];
   const selectedRelatedPerson = filteredPersonsList.find((p) => p.id === Number(relatedPersonId));
+
+  // Get spouses of selected relative
+  const selectedSpouses = React.useMemo(() => {
+    if (!selectedRelatedPerson) return [];
+    const spouseRelationships = selectedRelatedPerson.relationships?.filter(
+      (rel) => rel.type === 'SPOUSE'
+    ) || [];
+    return spouseRelationships
+      .map((rel) => allPersons?.find((p) => p.id === rel.relatedPersonId))
+      .filter((p): p is NonNullable<typeof p> => !!p);
+  }, [selectedRelatedPerson, allPersons]);
+
+  // Reset second parent if selected relative changes
+  React.useEffect(() => {
+    setValue('secondParentId', '');
+  }, [relatedPersonId, setValue]);
 
   const fieldClass = "w-full rounded-xl px-4 py-3 text-sm outline-none transition-all";
   const fieldStyle = {
@@ -456,7 +471,7 @@ const AddEditPerson: React.FC = () => {
                 </select>
               </div>
 
-              {!(isParentOrGpSelected && !alive) && (
+              {alive && (
                 <>
                   <div>
                     <label className="mb-1.5 block text-sm font-semibold flex items-center gap-1.5" style={{ color: '#2d3a2a' }}>
@@ -479,7 +494,7 @@ const AddEditPerson: React.FC = () => {
                   <div>
                     <label className="mb-1.5 block text-sm font-semibold flex items-center gap-1.5" style={{ color: '#2d3a2a' }}>
                       <Mail size={14} style={{ color: '#2d6a4f' }} />
-                      <span>Email Address {isParentOrGpSelected && <span className="text-red-500">*</span>}</span>
+                      <span>Email Address {(isParent || isRootAncestor) && <span className="text-red-500">*</span>}</span>
                     </label>
                     <input
                       {...register('email')}
@@ -505,46 +520,27 @@ const AddEditPerson: React.FC = () => {
                     <span>Family Tree Connection</span>
                   </h3>
 
-                  {user?.role === 'Family Member' ? (
+                  {isRootAncestor ? (
+                    <div className="bg-[#e8f5ee] rounded-2xl p-5 border border-[#c8e6d0] text-center space-y-2">
+                      <p className="text-sm font-semibold text-[#1a3a2a] flex items-center justify-center gap-1.5">
+                        <Sparkles size={16} className="text-[#2d6a4f]" />
+                        <span>Root Ancestor Setup</span>
+                      </p>
+                      <p className="text-xs text-[#5a4a3a] max-w-lg mx-auto leading-relaxed">
+                        This is the very first person in the family tree. They will serve as the <strong>Root Ancestor</strong> with no parent. Every subsequent person will be linked as their descendant.
+                      </p>
+                    </div>
+                  ) : user?.role === 'Family Member' ? (
                     <div className="bg-[#e8f5ee] rounded-2xl p-5 border border-[#c8e6d0] text-center space-y-2">
                       <p className="text-sm font-semibold text-[#1a3a2a]">Connecting to Your Profile</p>
                       <p className="text-xs text-[#5a4a3a] max-w-lg mx-auto leading-relaxed">
                         As a Family Member, you can only add children directly below yourself in the hierarchy. This profile will automatically be linked as a <strong>Child</strong> of your profile (<strong>{user.name}</strong>).
                       </p>
                     </div>
-                  ) : isFirstPerson ? (
-                    <div className="grid gap-6 sm:grid-cols-2">
-                      <div>
-                        <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>
-                          What's their relationship to you?
-                        </label>
-                        <select
-                          {...register('relationshipType')}
-                          className={fieldClass}
-                          style={fieldStyle}
-                          onFocus={(e) => setFocusBorder(e.target, '#2d6a4f')}
-                          onBlur={(e) => setFocusBorder(e.target, '#e8e0d0')}
-                        >
-                          <option value="">-- Select Relationship --</option>
-                          <option value="FATHER">Father</option>
-                          <option value="MOTHER">Mother</option>
-                          <option value="PATERNAL_GRANDFATHER">Paternal Grandfather</option>
-                          <option value="PATERNAL_GRANDMOTHER">Paternal Grandmother</option>
-                          <option value="MATERNAL_GRANDFATHER">Maternal Grandfather</option>
-                          <option value="MATERNAL_GRANDMOTHER">Maternal Grandmother</option>
-                          <option value="SPOUSE">Spouse</option>
-                          <option value="SIBLING">Sibling</option>
-                          <option value="CHILD">Child</option>
-                        </select>
-                        {errors.relationshipType && (
-                          <p className="mt-1 text-xs text-red-600 font-semibold">{errors.relationshipType.message}</p>
-                        )}
-                      </div>
-                    </div>
                   ) : (
                     <div className="grid gap-6 sm:grid-cols-2">
                       <div>
-                        <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Connect to Family Member</label>
+                        <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Choose Relative *</label>
                         <select
                           {...register('relatedPersonId')}
                           className={fieldClass}
@@ -552,7 +548,7 @@ const AddEditPerson: React.FC = () => {
                           onFocus={(e) => setFocusBorder(e.target, '#2d6a4f')}
                           onBlur={(e) => setFocusBorder(e.target, '#e8e0d0')}
                         >
-                          <option value="">-- Select Member --</option>
+                          <option value="">-- Choose Relative --</option>
                           {filteredPersonsList.map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.firstName} {p.lastName}
@@ -595,7 +591,7 @@ const AddEditPerson: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Relationship Type</label>
+                        <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>Relationship Type *</label>
                         <select
                           {...register('relationshipType')}
                           className={fieldClass}
@@ -603,25 +599,45 @@ const AddEditPerson: React.FC = () => {
                           onFocus={(e) => setFocusBorder(e.target, '#2d6a4f')}
                           onBlur={(e) => setFocusBorder(e.target, '#e8e0d0')}
                         >
-                          <option value="">-- None --</option>
-                          <option value="FATHER">Father</option>
-                          <option value="MOTHER">Mother</option>
-                          <option value="PATERNAL_GRANDFATHER">Paternal Grandfather</option>
-                          <option value="PATERNAL_GRANDMOTHER">Paternal Grandmother</option>
-                          <option value="MATERNAL_GRANDFATHER">Maternal Grandfather</option>
-                          <option value="MATERNAL_GRANDMOTHER">Maternal Grandmother</option>
-                          <option value="CHILD">Child</option>
-                          <option value="SPOUSE">Spouse</option>
-                          <option value="SIBLING">Sibling</option>
+                          <option value="CHILD">Child of Selected Relative</option>
+                          <option value="SPOUSE">Spouse of Selected Relative</option>
                         </select>
+                        {errors.relationshipType && (
+                          <p className="mt-1 text-xs text-red-600 font-semibold">{errors.relationshipType.message}</p>
+                        )}
                       </div>
+                      
+                      {relationshipType === 'CHILD' && selectedSpouses.length > 0 && (
+                        <div className="sm:col-span-2">
+                          <label className="mb-1.5 block text-sm font-semibold" style={{ color: '#2d3a2a' }}>
+                            Second Parent (Optional)
+                          </label>
+                          <select
+                            {...register('secondParentId')}
+                            className={fieldClass}
+                            style={fieldStyle}
+                            onFocus={(e) => setFocusBorder(e.target, '#2d6a4f')}
+                            onBlur={(e) => setFocusBorder(e.target, '#e8e0d0')}
+                          >
+                            <option value="">-- None --</option>
+                            {selectedSpouses.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.firstName} {s.lastName}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="mt-1.5 text-xs text-[#a09080]">
+                            If this child belongs to a specific spouse couple, select the other parent.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Conditional Parent/Grandparent Credentials and Representative Fields */}
-              {isParentOrGpSelected && (
+              {/* Conditional Child/Partner Credentials and Representative Fields */}
+              {isSubsequentPerson && (
                 <div className="lg:col-span-2 bg-[#e8f5ee] rounded-2xl p-5 border border-[#c8e6d0] space-y-4">
                   <h4 className="text-sm font-bold flex items-center gap-2" style={{ color: '#1a3a2a' }}>
                     <Mail size={16} className="text-[#2d6a4f]" />
@@ -630,11 +646,17 @@ const AddEditPerson: React.FC = () => {
                   
                   <div>
                     <label className="mb-1.5 block text-xs font-bold" style={{ color: '#2d3a2a' }}>
-                      Is this parent/grandparent alive?
+                      Is this member alive?
                     </label>
                     <select
                       value={alive ? 'true' : 'false'}
-                      onChange={(e) => setValue('alive', e.target.value === 'true')}
+                      onChange={(e) => {
+                        const val = e.target.value === 'true';
+                        setValue('alive', val);
+                        if (!val) {
+                          setValue('isParent', false);
+                        }
+                      }}
                       className="w-full rounded-xl px-4 py-2.5 text-sm outline-none bg-white border border-[#c8e6d0]"
                     >
                       <option value="true">Yes, they are alive</option>
@@ -642,91 +664,123 @@ const AddEditPerson: React.FC = () => {
                     </select>
                   </div>
 
-                  {alive ? (
-                    <p className="text-xs text-[#2d6a4f] leading-relaxed font-semibold">
-                      ✨ Since they are alive, they will receive login credentials at the email address provided above. They can log in to view the tree and add their own relatives.
-                    </p>
-                  ) : (
-                    <div className="space-y-4 pt-4 border-t border-[#c8e6d0]">
-                      <h5 className="text-xs font-bold text-[#1a3a2a] uppercase tracking-wider">
-                        Living Child Representative
-                      </h5>
-                      <p className="text-xs text-[#5a4a3a] leading-relaxed">
-                        Since this parent/grandparent is deceased, please specify one of their living children to receive login credentials instead. They will be able to log in and build their branch downward.
+                  {relationshipType === 'SPOUSE' ? (
+                    alive ? (
+                      <p className="text-xs text-[#2d6a4f] leading-relaxed font-semibold">
+                        ✨ Confirmed as a living spouse. They will receive login credentials at the email address provided above to log in and view the tree.
                       </p>
-                      
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div>
-                          <label className="mb-1.5 block text-xs font-bold" style={{ color: '#2d3a2a' }}>Child's First Name *</label>
+                    ) : (
+                      <p className="text-xs text-[#5a4a3a] leading-relaxed">
+                        Spouse profile will be added as a deceased historical partner. No portal credentials will be generated.
+                      </p>
+                    )
+                  ) : (
+                    alive ? (
+                      <div className="space-y-4 pt-2">
+                        <div className="flex items-center gap-3 bg-white p-4 rounded-xl border border-[#c8e6d0]">
                           <input
-                            {...register('childFirstName')}
-                            placeholder="e.g. Robert"
-                            className="w-full rounded-xl px-4 py-2.5 text-sm outline-none bg-white border border-[#c8e6d0]"
+                            type="checkbox"
+                            id="isParentCheckbox"
+                            {...register('isParent')}
+                            className="h-4.5 w-4.5 rounded border-[#e8e0d0] text-[#2d6a4f] focus:ring-[#2d6a4f] cursor-pointer"
                           />
-                          {errors.childFirstName && (
-                            <p className="mt-1 text-xs text-red-600 font-semibold">{errors.childFirstName.message}</p>
-                          )}
+                          <label htmlFor="isParentCheckbox" className="text-sm font-bold text-[#2d3a2a] cursor-pointer select-none">
+                            Is this child a parent? (Confirm if they already have children of their own)
+                          </label>
                         </div>
 
-                        <div>
-                          <label className="mb-1.5 block text-xs font-bold" style={{ color: '#2d3a2a' }}>Child's Last Name *</label>
-                          <input
-                            {...register('childLastName')}
-                            placeholder="e.g. Smith"
-                            className="w-full rounded-xl px-4 py-2.5 text-sm outline-none bg-white border border-[#c8e6d0]"
-                          />
-                          {errors.childLastName && (
-                            <p className="mt-1 text-xs text-red-600 font-semibold">{errors.childLastName.message}</p>
-                          )}
-                        </div>
+                        {isParent ? (
+                          <p className="text-xs text-[#2d6a4f] leading-relaxed font-semibold">
+                            ✨ Confirmed as a parent. They will receive login credentials at the email address provided above to log in and keep adding their branch.
+                          </p>
+                        ) : (
+                          <p className="text-xs text-[#5a4a3a] leading-relaxed">
+                            This child will be added to the tree as a member profile. They will not receive credentials to add members unless they are marked as a parent.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-4 pt-4 border-t border-[#c8e6d0]">
+                        <h5 className="text-xs font-bold text-[#1a3a2a] uppercase tracking-wider">
+                          Living Child Representative
+                        </h5>
+                        <p className="text-xs text-[#5a4a3a] leading-relaxed">
+                          Since this child is deceased, please specify one of their living children to receive login credentials instead. They will be able to log in and build their branch downward.
+                        </p>
+                        
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div>
+                            <label className="mb-1.5 block text-xs font-bold" style={{ color: '#2d3a2a' }}>Child's First Name *</label>
+                            <input
+                              {...register('childFirstName')}
+                              placeholder="e.g. Robert"
+                              className="w-full rounded-xl px-4 py-2.5 text-sm outline-none bg-white border border-[#c8e6d0]"
+                            />
+                            {errors.childFirstName && (
+                              <p className="mt-1 text-xs text-red-600 font-semibold">{errors.childFirstName.message}</p>
+                            )}
+                          </div>
 
-                        <div>
-                          <label className="mb-1.5 block text-xs font-bold" style={{ color: '#2d3a2a' }}>Child's Birth Date *</label>
-                          <input
-                            type="date"
-                            {...register('childBirthDate')}
-                            className="w-full rounded-xl px-4 py-2.5 text-sm outline-none bg-white border border-[#c8e6d0]"
-                          />
-                          {errors.childBirthDate && (
-                            <p className="mt-1 text-xs text-red-600 font-semibold">{errors.childBirthDate.message}</p>
-                          )}
-                        </div>
+                          <div>
+                            <label className="mb-1.5 block text-xs font-bold" style={{ color: '#2d3a2a' }}>Child's Last Name *</label>
+                            <input
+                              {...register('childLastName')}
+                              placeholder="e.g. Smith"
+                              className="w-full rounded-xl px-4 py-2.5 text-sm outline-none bg-white border border-[#c8e6d0]"
+                            />
+                            {errors.childLastName && (
+                              <p className="mt-1 text-xs text-red-600 font-semibold">{errors.childLastName.message}</p>
+                            )}
+                          </div>
 
-                        <div>
-                          <label className="mb-1.5 block text-xs font-bold" style={{ color: '#2d3a2a' }}>Child's Gender</label>
-                          <select
-                            {...register('childGender')}
-                            className="w-full rounded-xl px-4 py-2.5 text-sm outline-none bg-white border border-[#c8e6d0]"
-                          >
-                            <option value="MALE">Male</option>
-                            <option value="FEMALE">Female</option>
-                            <option value="OTHER">Other</option>
-                          </select>
-                        </div>
+                          <div>
+                            <label className="mb-1.5 block text-xs font-bold" style={{ color: '#2d3a2a' }}>Child's Birth Date *</label>
+                            <input
+                              type="date"
+                              {...register('childBirthDate')}
+                              className="w-full rounded-xl px-4 py-2.5 text-sm outline-none bg-white border border-[#c8e6d0]"
+                            />
+                            {errors.childBirthDate && (
+                              <p className="mt-1 text-xs text-red-600 font-semibold">{errors.childBirthDate.message}</p>
+                            )}
+                          </div>
 
-                        <div>
-                          <label className="mb-1.5 block text-xs font-bold" style={{ color: '#2d3a2a' }}>Child's Email *</label>
-                          <input
-                            type="email"
-                            {...register('childEmail')}
-                            placeholder="e.g. child@example.com"
-                            className="w-full rounded-xl px-4 py-2.5 text-sm outline-none bg-white border border-[#c8e6d0]"
-                          />
-                          {errors.childEmail && (
-                            <p className="mt-1 text-xs text-red-600 font-semibold">{errors.childEmail.message}</p>
-                          )}
-                        </div>
+                          <div>
+                            <label className="mb-1.5 block text-xs font-bold" style={{ color: '#2d3a2a' }}>Child's Gender</label>
+                            <select
+                              {...register('childGender')}
+                              className="w-full rounded-xl px-4 py-2.5 text-sm outline-none bg-white border border-[#c8e6d0]"
+                            >
+                              <option value="MALE">Male</option>
+                              <option value="FEMALE">Female</option>
+                              <option value="OTHER">Other</option>
+                            </select>
+                          </div>
 
-                        <div>
-                          <label className="mb-1.5 block text-xs font-bold" style={{ color: '#2d3a2a' }}>Child's Phone Number</label>
-                          <input
-                            {...register('childPhoneNumber')}
-                            placeholder="e.g. +1 555-019-2834"
-                            className="w-full rounded-xl px-4 py-2.5 text-sm outline-none bg-white border border-[#c8e6d0]"
-                          />
+                          <div className="sm:col-span-2">
+                            <label className="mb-1.5 block text-xs font-bold" style={{ color: '#2d3a2a' }}>Child's Email *</label>
+                            <input
+                              type="email"
+                              {...register('childEmail')}
+                              placeholder="e.g. child@example.com"
+                              className="w-full rounded-xl px-4 py-2.5 text-sm outline-none bg-white border border-[#c8e6d0]"
+                            />
+                            {errors.childEmail && (
+                              <p className="mt-1 text-xs text-red-600 font-semibold">{errors.childEmail.message}</p>
+                            )}
+                          </div>
+
+                          <div className="sm:col-span-2">
+                            <label className="mb-1.5 block text-xs font-bold" style={{ color: '#2d3a2a' }}>Child's Phone Number</label>
+                            <input
+                              {...register('childPhoneNumber')}
+                              placeholder="e.g. +1 555-019-2834"
+                              className="w-full rounded-xl px-4 py-2.5 text-sm outline-none bg-white border border-[#c8e6d0]"
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )
                   )}
                 </div>
               )}

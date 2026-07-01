@@ -4,7 +4,7 @@ import { usePersons } from '../hooks/usePersons';
 import { useUpload } from '../hooks/useUpload';
 import { useAuthContext } from '../context/AuthContext';
 import DecompressedImage from '../components/DecompressedImage';
-import { Calendar, Camera, Trash2, Edit2, ArrowLeft, Heart, Users, ScrollText, Flame, Mail, Phone, ChevronDown } from 'lucide-react';
+import { Calendar, Camera, Trash2, Edit2, ArrowLeft, Heart, Users, ScrollText, Flame, Mail, Phone, ChevronDown, Eye, X } from 'lucide-react';
 import { useTrees } from '../hooks/useTrees';
 import type { ComputedRelationship } from '../types';
 
@@ -54,7 +54,12 @@ const getRelationshipCategoryId = (typeLabel: string): RelationshipCategoryId =>
   if (['mother', 'father', 'parent'].includes(label)) return 'parents';
   if (['daughter', 'son', 'child'].includes(label)) return 'children';
   if (['sister', 'brother', 'sibling'].includes(label)) return 'siblings';
-  if (spouseRelationshipLabels.has(label)) return 'spouses';
+  if (
+    spouseRelationshipLabels.has(label) ||
+    label.startsWith('wife') ||
+    label.startsWith('husband') ||
+    label.startsWith('spouse')
+  ) return 'spouses';
   if (['grandmother', 'grandfather', 'grandparent'].includes(label)) return 'grandparents';
   if (['granddaughter', 'grandson', 'grandchild'].includes(label)) return 'grandchildren';
   if (label === 'aunt') return 'aunts';
@@ -96,6 +101,21 @@ const PersonProfile: React.FC = () => {
   const { useGet: useTreeGet } = useTrees();
   const { data: tree } = useTreeGet(Number(treeId), isPublic);
   const { user } = useAuthContext();
+  const [isViewerOpen, setIsViewerOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsViewerOpen(false);
+      }
+    };
+    if (isViewerOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isViewerOpen]);
 
   const canEdit = React.useMemo(() => {
     if (isPublic) return false;
@@ -201,14 +221,43 @@ const PersonProfile: React.FC = () => {
               }}
             />
             <div className="absolute -bottom-20 left-6 sm:left-8">
-              <div className="group relative h-40 w-40 overflow-hidden rounded-2xl border-4 border-white bg-[#f7f4ef] shadow-md">
+              <div
+                onClick={!canEdit && person.photoUrl ? () => setIsViewerOpen(true) : undefined}
+                className={`group relative h-40 w-40 overflow-hidden rounded-2xl border-4 border-white bg-[#f7f4ef] shadow-md ${
+                  !canEdit && person.photoUrl ? 'cursor-pointer' : ''
+                }`}
+              >
                 <DecompressedImage photoUrl={person.photoUrl} fallbackIconSize={48} className="w-full h-full object-cover" />
-                {canEdit && (
-                  <label className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center bg-black/50 text-white opacity-0 transition-all duration-300 group-hover:opacity-100">
-                    <Camera size={24} />
-                    <span className="mt-1 text-[10px] font-bold">Upload Photo</span>
-                    <input type="file" className="hidden" onChange={handlePhotoUpload} disabled={isUploading} />
-                  </label>
+                
+                {/* Hover Overlay */}
+                {(person.photoUrl || canEdit) && (
+                  <div className="absolute inset-0 bg-black/50 opacity-0 transition-all duration-300 group-hover:opacity-100 flex items-center justify-center gap-5">
+                    {person.photoUrl && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsViewerOpen(true);
+                        }}
+                        className="text-white hover:scale-110 transition-transform cursor-pointer flex flex-col items-center gap-1"
+                        title="View Photo"
+                      >
+                        <Eye size={20} />
+                        <span className="text-[9px] font-bold">View</span>
+                      </button>
+                    )}
+                    {canEdit && (
+                      <label
+                        className="text-white hover:scale-110 transition-transform cursor-pointer flex flex-col items-center gap-1"
+                        title="Upload Photo"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Camera size={20} style={{ display: 'inline-block' }} />
+                        <span className="text-[9px] font-bold">Upload</span>
+                        <input type="file" className="hidden" onChange={handlePhotoUpload} disabled={isUploading} />
+                      </label>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -245,6 +294,16 @@ const PersonProfile: React.FC = () => {
               
               {/* Actions */}
               <div className="flex gap-2">
+                {person.photoUrl && (
+                  <button 
+                    onClick={() => setIsViewerOpen(true)}
+                    className="cursor-pointer rounded-xl p-3 transition-all duration-200 hover:bg-[#f0ece4]"
+                    style={{ color: '#5a4a3a', border: '1px solid #e8e0d0' }}
+                    title="View Photo"
+                  >
+                    <Eye size={18} />
+                  </button>
+                )}
                 {canEdit && (
                   <Link 
                     to={`/trees/${treeId}/persons/${personId}/edit`} 
@@ -389,7 +448,11 @@ const PersonProfile: React.FC = () => {
 
                               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                                 {expandedRelationshipGroup.relationships.map((rel) => {
-                                  const isSpouse = spouseRelationshipLabels.has(rel.typeLabel.toLowerCase());
+                                  const labelLower = rel.typeLabel.toLowerCase();
+                                  const isSpouse = spouseRelationshipLabels.has(labelLower) ||
+                                    labelLower.startsWith('wife') ||
+                                    labelLower.startsWith('husband') ||
+                                    labelLower.startsWith('spouse');
 
                                   return (
                                     <Link
@@ -456,6 +519,32 @@ const PersonProfile: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* Centered Modal / Popup for viewing the photo at a larger size */}
+      {isViewerOpen && person.photoUrl && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={() => setIsViewerOpen(false)}
+        >
+          <div 
+            className="relative max-h-[90vh] max-w-[90vw] overflow-hidden rounded-2xl bg-white p-2 shadow-2xl animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setIsViewerOpen(false)}
+              className="absolute top-4 right-4 z-10 cursor-pointer rounded-full bg-black/60 p-2 text-white hover:bg-black/85 transition-colors"
+              title="Close"
+            >
+              <X size={20} />
+            </button>
+            <DecompressedImage 
+              photoUrl={person.photoUrl} 
+              fallbackIconSize={48} 
+              className="max-h-[80vh] max-w-full rounded-lg object-contain shadow-inner"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

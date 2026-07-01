@@ -421,5 +421,54 @@ public class PersonServiceRefactoredTest {
         Optional<User> deletedUserOpt = userRepository.findByPersonId(person.getId());
         assertTrue(deletedUserOpt.isEmpty());
     }
+
+    @Test
+    void testCreatePerson_WithSecondParent() {
+        // Create parent A (male)
+        PersonRequest pA = new PersonRequest();
+        pA.setFirstName("Father");
+        pA.setLastName("Smith");
+        pA.setBirthDate(LocalDate.of(1980, 1, 1));
+        pA.setGender("MALE");
+        PersonResponse parentA = personService.create(testTree.getId(), pA, testUser.getId());
+
+        // Create parent B (female, spouse of A)
+        PersonRequest pB = new PersonRequest();
+        pB.setFirstName("Mother");
+        pB.setLastName("Smith");
+        pB.setBirthDate(LocalDate.of(1982, 1, 1));
+        pB.setGender("FEMALE");
+        PersonResponse parentB = personService.create(testTree.getId(), pB, testUser.getId());
+
+        // Link parent A and parent B as spouses
+        RelationshipRequest spouseReq = new RelationshipRequest();
+        spouseReq.setRelatedPersonId(parentB.getId());
+        spouseReq.setType("SPOUSE");
+        personService.addRelationship(testTree.getId(), parentA.getId(), spouseReq, testUser.getId());
+
+        // Create child and specify both parent A and parent B (as secondParentId)
+        PersonRequest childReq = new PersonRequest();
+        childReq.setFirstName("Child");
+        childReq.setLastName("Smith");
+        childReq.setBirthDate(LocalDate.of(2010, 1, 1));
+        childReq.setGender("MALE");
+        childReq.setRelatedPersonId(parentA.getId());
+        childReq.setRelationshipType("CHILD");
+        childReq.setSecondParentId(parentB.getId());
+        
+        PersonResponse child = personService.create(testTree.getId(), childReq, testUser.getId());
+
+        // Verify relationships of Child
+        Person childEntity = personRepository.findById(child.getId()).orElseThrow();
+        
+        // Child should have PARENT relationships to both parentA and parentB
+        boolean hasRelA = childEntity.getRelationships().stream()
+                .anyMatch(r -> r.getRelatedPerson().getId().equals(parentA.getId()) && r.getType() == Relationship.RelationshipType.PARENT);
+        boolean hasRelB = childEntity.getRelationships().stream()
+                .anyMatch(r -> r.getRelatedPerson().getId().equals(parentB.getId()) && r.getType() == Relationship.RelationshipType.PARENT);
+        
+        assertTrue(hasRelA);
+        assertTrue(hasRelB);
+    }
 }
 

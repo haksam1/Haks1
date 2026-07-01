@@ -225,7 +225,7 @@ const ParentChildEdge = ({
   data,
 }: EdgeProps & { data?: { midX?: number } }) => {
   const midX = data?.midX ?? sourceX;
-  const dropY = sourceY + 78;
+  const dropY = sourceY + (targetY - sourceY) / 2;
 
   const d = `
     M ${midX} ${sourceY}
@@ -243,10 +243,10 @@ const edgeTypes = { spouse: SpouseEdge, parentChild: ParentChildEdge };
 // ─── Layout Constants ────────────────────────────────────────────────────────
 const NODE_W = 112;
 const NODE_H = 82;
-const H_GAP = 64;
-const V_GAP = 120;
-const LAYOUT_PADDING_X = 128;
-const LAYOUT_PADDING_TOP = 128;
+const H_GAP = 32;
+const V_GAP = 64;
+const LAYOUT_PADDING_X = 48;
+const LAYOUT_PADDING_TOP = 48;
 const TREE_FIT_VIEW_OPTIONS = { padding: 0.12, minZoom: 0.45, maxZoom: 1.0, duration: 800 };
 
 // Helper to find parent IDs of a child
@@ -291,7 +291,20 @@ function buildLayout(persons: Person[], collapsedNodeIds: Set<string>): { nodes:
   const personMap: Record<number, Person> = {};
   persons.forEach((p) => (personMap[p.id] = p));
 
-  // Find spouse pairs among visible persons
+  // Find spouses of each person
+  const spousesOf: Record<number, number[]> = {};
+  persons.forEach((p) => {
+    p.relationships.forEach((rel) => {
+      if (rel.type === 'SPOUSE' && personMap[rel.relatedPersonId]) {
+        if (!spousesOf[p.id]) spousesOf[p.id] = [];
+        if (!spousesOf[p.id].includes(rel.relatedPersonId)) {
+          spousesOf[p.id].push(rel.relatedPersonId);
+        }
+      }
+    });
+  });
+
+  // Find spouse pairs for edges
   const spousePairs: [number, number][] = [];
   const spouseSet = new Set<string>();
   persons.forEach((p) => {
@@ -300,10 +313,7 @@ function buildLayout(persons: Person[], collapsedNodeIds: Set<string>): { nodes:
         const key = [p.id, rel.relatedPersonId].sort((a, b) => a - b).join('-');
         if (!spouseSet.has(key)) {
           spouseSet.add(key);
-          spousePairs.push([
-            Math.min(p.id, rel.relatedPersonId),
-            Math.max(p.id, rel.relatedPersonId),
-          ]);
+          spousePairs.push([p.id, rel.relatedPersonId]);
         }
       }
     });
@@ -352,7 +362,7 @@ function buildLayout(persons: Person[], collapsedNodeIds: Set<string>): { nodes:
   // Group into Layout Units (Spouses couples or Singles)
   interface LayoutUnit {
     id: string;
-    members: number[]; // 1 or 2 person IDs
+    members: number[]; // 1 or more person IDs (spouses side by side)
     children: LayoutUnit[];
     width: number;
     subtreeWidth: number;
@@ -364,12 +374,42 @@ function buildLayout(persons: Person[], collapsedNodeIds: Set<string>): { nodes:
   const personToUnit: Record<number, LayoutUnit> = {};
   const groupedPeople = new Set<number>();
 
-  // Create Couple Units
-  spousePairs.forEach(([a, b]) => {
-    if (visiblePersonMap[a] && visiblePersonMap[b]) {
+  // Sort visible persons to process the "family hubs" (parents with multiple spouses) first
+  const sortedPersonsForGrouping = [...visiblePersons].sort((a, b) => {
+    const aSpouseCount = (spousesOf[a.id] || []).length;
+    const bSpouseCount = (spousesOf[b.id] || []).length;
+    if (aSpouseCount !== bSpouseCount) {
+      return bSpouseCount - aSpouseCount;
+    }
+    const aIsParent = hasParent.has(a.id);
+    const bIsParent = hasParent.has(b.id);
+    if (aIsParent !== bIsParent) {
+      return aIsParent ? -1 : 1;
+    }
+    return a.id - b.id;
+  });
+
+  // Create Spouses/Couple Units (Multiple Spouses placed side-by-side with original person in center)
+  sortedPersonsForGrouping.forEach((p) => {
+    if (groupedPeople.has(p.id)) return;
+
+    const visibleSpouses = (spousesOf[p.id] || []).filter(
+      (sid) => visiblePersonMap[sid] && !groupedPeople.has(sid)
+    );
+
+    if (visibleSpouses.length > 0) {
+      const members = [p.id, ...visibleSpouses];
+      // Deterministically place the primary node p.id close to the middle of the spouses group
+      const centerIndex = Math.floor(members.length / 2);
+      if (centerIndex > 0) {
+        members.splice(0, 1); // remove p.id from start
+        members.splice(centerIndex, 0, p.id); // insert p.id at center
+      }
+
+      const unitId = `family-${members.join('-')}`;
       const unit: LayoutUnit = {
-        id: `couple-${a}-${b}`,
-        members: [a, b],
+        id: unitId,
+        members: members,
         children: [],
         width: 0,
         subtreeWidth: 0,
@@ -377,14 +417,14 @@ function buildLayout(persons: Person[], collapsedNodeIds: Set<string>): { nodes:
         y: 0,
       };
       units.push(unit);
-      personToUnit[a] = unit;
-      personToUnit[b] = unit;
-      groupedPeople.add(a);
-      groupedPeople.add(b);
+      members.forEach((mId) => {
+        personToUnit[mId] = unit;
+        groupedPeople.add(mId);
+      });
     }
   });
 
-  // Create Single Units
+  // Create Single Units for anyone left
   visiblePersons.forEach((p) => {
     if (!groupedPeople.has(p.id)) {
       const unit: LayoutUnit = {
@@ -426,15 +466,12 @@ function buildLayout(persons: Person[], collapsedNodeIds: Set<string>): { nodes:
   });
 
   const rootUnits = units.filter((u) => !unitHasParent.has(u.id));
-  const SPOUSE_GAP = 32;
+  const SPOUSE_GAP = 6;
 
   // Compute subtree widths bottom-up
   const computeSubtreeWidth = (u: LayoutUnit): number => {
-    if (u.members.length === 2) {
-      u.width = NODE_W * 2 + SPOUSE_GAP;
-    } else {
-      u.width = NODE_W;
-    }
+    const numMembers = u.members.length;
+    u.width = numMembers * NODE_W + (numMembers - 1) * SPOUSE_GAP;
 
     if (u.children.length === 0) {
       u.subtreeWidth = u.width;
@@ -460,24 +497,10 @@ function buildLayout(persons: Person[], collapsedNodeIds: Set<string>): { nodes:
     u.x = unitCenterX - u.width / 2;
     u.y = yOffset;
 
-    if (u.members.length === 2) {
-      const [a, b] = u.members;
-      const pA = visiblePersonMap[a];
-      const pB = visiblePersonMap[b];
-      const putALeft = pA?.gender === 'MALE' || pB?.gender !== 'MALE';
-
-      const leftId = putALeft ? a : b;
-      const rightId = putALeft ? b : a;
-
-      posX[leftId] = u.x;
-      posY[leftId] = u.y;
-      posX[rightId] = u.x + NODE_W + SPOUSE_GAP;
-      posY[rightId] = u.y;
-    } else {
-      const a = u.members[0];
-      posX[a] = u.x;
-      posY[a] = u.y;
-    }
+    u.members.forEach((mId, index) => {
+      posX[mId] = u.x + index * (NODE_W + SPOUSE_GAP);
+      posY[mId] = u.y;
+    });
 
     if (u.children.length > 0) {
       let totalChildrenWidth = 0;
@@ -498,7 +521,7 @@ function buildLayout(persons: Person[], collapsedNodeIds: Set<string>): { nodes:
   let currentRootLeftX = 0;
   rootUnits.forEach((root) => {
     layoutUnit(root, currentRootLeftX, 0);
-    currentRootLeftX += root.subtreeWidth + H_GAP * 2;
+    currentRootLeftX += root.subtreeWidth + H_GAP;
   });
 
   // Global alignment with padding
@@ -536,8 +559,8 @@ function buildLayout(persons: Person[], collapsedNodeIds: Set<string>): { nodes:
       const sourceIsLeft = (posX[a] ?? 0) <= (posX[b] ?? 0);
       edges.push({
         id: `spouse-${a}-${b}`,
-        source: a.toString(),
-        target: b.toString(),
+        source: sourceIsLeft ? a.toString() : b.toString(),
+        target: sourceIsLeft ? b.toString() : a.toString(),
         type: 'spouse',
         sourceHandle: sourceIsLeft ? 'spouse-right-source' : 'spouse-left-source',
         targetHandle: sourceIsLeft ? 'spouse-left-target' : 'spouse-right-target',
@@ -550,16 +573,8 @@ function buildLayout(persons: Person[], collapsedNodeIds: Set<string>): { nodes:
     const children = childrenOf[p.id] || [];
     if (!children.length) return;
 
-    const spouseRel = p.relationships.find((r) => r.type === 'SPOUSE');
-    const spouseId = spouseRel?.relatedPersonId;
-    const hasVisibleSpouse = spouseId !== undefined && visiblePersonMap[spouseId];
-    const spouseX = hasVisibleSpouse ? posX[spouseId] : undefined;
-
-    const parentCenterX = (posX[p.id] ?? 0) + NODE_W / 2;
-    const midX =
-      spouseX !== undefined
-        ? (parentCenterX + spouseX + NODE_W / 2) / 2
-        : parentCenterX;
+    const parentUnit = personToUnit[p.id];
+    const midX = parentUnit ? parentUnit.x + parentUnit.width / 2 : (posX[p.id] ?? 0) + NODE_W / 2;
 
     children.forEach((childId) => {
       if (visiblePersonMap[childId]) {
@@ -660,6 +675,8 @@ const TreeFlow = ({ treeId, isPublic }: { treeId: number; isPublic: boolean }) =
   const navigate = useNavigate();
   const { useList: usePersonsList } = usePersons(Number(treeId));
   const { data: persons, isLoading } = usePersonsList(isPublic);
+  const { useGet: useTreeGet } = useTrees();
+  const { data: tree } = useTreeGet(Number(treeId), isPublic);
 
   const isInitialFitDone = useRef(false);
   const [pendingCenterNodeId, setPendingCenterNodeId] = useState<string | null>(null);
@@ -701,49 +718,96 @@ const TreeFlow = ({ treeId, isPublic }: { treeId: number; isPublic: boolean }) =
     return buildLayout(persons, collapsedNodeIds);
   }, [persons, collapsedNodeIds]);
 
-  // Inject callbacks and selection/highlight states dynamically to prevent full layout recalculations
+  // Enrich nodes with dynamic selection, highlight, collapse states
   const nodes = useMemo(() => {
-    return baseNodes.map((node: Node<PersonNodeData>) => {
+    return baseNodes.map((n) => {
+      const isSelected = n.id === selectedNodeId;
+      const isHighlighted = n.id === highlightedNodeId;
+      const isCollapsed = collapsedNodeIds.has(n.id);
+      const personData = n.data as Person;
+      const hasChildren = persons ? persons.some((p) => p.relationships.some((r) => r.type === 'PARENT' && r.relatedPersonId === personData.id)) : false;
+
       return {
-        ...node,
+        ...n,
         data: {
-          ...node.data,
-          isSelected: selectedNodeId === node.id,
-          isHighlighted: highlightedNodeId === node.id,
-          isCollapsed: collapsedNodeIds.has(node.id),
-          onToggleCollapse: () => handleToggleCollapse(node.id),
+          ...n.data,
+          isSelected,
+          isHighlighted,
+          hasChildren,
+          isCollapsed,
+          onToggleCollapse: () => handleToggleCollapse(n.id),
           onSelect: () => {
-            setSelectedNodeId(node.id);
+            setSelectedNodeId(n.id);
             const { zoom } = getViewport();
-            setCenter(node.position.x + NODE_W / 2, node.position.y + NODE_H / 2, {
-              zoom: Math.max(zoom, 1.2),
+            setCenter(n.position.x + NODE_W / 2, n.position.y + NODE_H / 2, {
+              zoom: Math.max(zoom, 1.25),
               duration: 800,
             });
-            setHighlightedNodeId(node.id);
-            setTimeout(() => setHighlightedNodeId(null), 2200);
+            setHighlightedNodeId(n.id);
+            setTimeout(() => setHighlightedNodeId(null), 2000);
           },
           onDoubleClick: () => {
             navigate(
               isPublic
-                ? `/public-trees/${treeId}/persons/${node.id}`
-                : `/trees/${treeId}/persons/${node.id}`
+                ? `/public-trees/${treeId}/persons/${n.id}`
+                : `/trees/${treeId}/persons/${n.id}`
             );
           },
         },
       };
     });
-  }, [baseNodes, selectedNodeId, highlightedNodeId, collapsedNodeIds, getViewport, setCenter, navigate, treeId, isPublic]);
+  }, [baseNodes, selectedNodeId, highlightedNodeId, collapsedNodeIds, persons, getViewport, setCenter, navigate, treeId, isPublic]);
 
-  const edges = baseEdges;
+  const edges = useMemo(() => baseEdges, [baseEdges]);
+
+  // Handle auto-fit logic once nodes are loaded
+  useEffect(() => {
+    if (!isLoading && nodesInitialized && nodes.length > 0 && !isInitialFitDone.current) {
+      const frame = window.requestAnimationFrame(() => {
+        fitView({ ...TREE_FIT_VIEW_OPTIONS, duration: 600 });
+        isInitialFitDone.current = true;
+      });
+
+      return () => window.cancelAnimationFrame(frame);
+    }
+  }, [fitView, isLoading, nodes.length, nodesInitialized]);
+
+  // Handler functions for navigation controls
+  const handleCenterTree = () => {
+    fitView(TREE_FIT_VIEW_OPTIONS);
+  };
+
+  const handleCenterSelected = () => {
+    if (selectedNodeId) {
+      const node = nodes.find((n: Node) => n.id === selectedNodeId);
+      if (node) {
+        const { zoom } = getViewport();
+        setCenter(node.position.x + NODE_W / 2, node.position.y + NODE_H / 2, {
+          zoom: Math.max(zoom, 1.25),
+          duration: 800,
+        });
+        setHighlightedNodeId(selectedNodeId);
+        setTimeout(() => setHighlightedNodeId(null), 2000);
+      }
+    }
+  };
+
+  const handleResetView = () => {
+    setCollapsedNodeIds(new Set());
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    setSelectedNodeId(null);
+    fitView({ padding: 0.12, minZoom: 0.45, maxZoom: 1.0, duration: 800 });
+  };
 
   // Search autocompletion list
   const searchResults = useMemo(() => {
     if (!persons || !searchQuery.trim()) return [];
     const query = searchQuery.toLowerCase();
-    return persons.filter((p) => {
-      const fullName = `${p.firstName || ''} ${p.lastName || ''}`.toLowerCase();
-      return fullName.includes(query);
-    });
+    return persons.filter(
+      (p) =>
+        p.firstName.toLowerCase().includes(query) ||
+        p.lastName.toLowerCase().includes(query)
+    );
   }, [persons, searchQuery]);
 
   const handleSearchSelect = (person: Person) => {
@@ -846,44 +910,6 @@ const TreeFlow = ({ treeId, isPublic }: { treeId: number; isPublic: boolean }) =
     isInitialFitDone.current = false;
   }, [treeId]);
 
-  useEffect(() => {
-    if (!isLoading && nodesInitialized && nodes.length > 0 && !isInitialFitDone.current) {
-      const frame = window.requestAnimationFrame(() => {
-        fitView({ ...TREE_FIT_VIEW_OPTIONS, duration: 600 });
-        isInitialFitDone.current = true;
-      });
-
-      return () => window.cancelAnimationFrame(frame);
-    }
-  }, [fitView, isLoading, nodes.length, nodesInitialized]);
-
-  // Handler functions for navigation controls
-  const handleCenterTree = () => {
-    fitView(TREE_FIT_VIEW_OPTIONS);
-  };
-
-  const handleCenterSelected = () => {
-    if (selectedNodeId) {
-      const node = nodes.find((n: Node) => n.id === selectedNodeId);
-      if (node) {
-        const { zoom } = getViewport();
-        setCenter(node.position.x + NODE_W / 2, node.position.y + NODE_H / 2, {
-          zoom: Math.max(zoom, 1.25),
-          duration: 800,
-        });
-        setHighlightedNodeId(selectedNodeId);
-        setTimeout(() => setHighlightedNodeId(null), 2000);
-      }
-    }
-  };
-
-  const handleResetView = () => {
-    setCollapsedNodeIds(new Set());
-    sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    setSelectedNodeId(null);
-    fitView({ padding: 0.12, minZoom: 0.45, maxZoom: 1.0, duration: 800 });
-  };
-
   if (isLoading) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center space-y-4">
@@ -899,148 +925,193 @@ const TreeFlow = ({ treeId, isPublic }: { treeId: number; isPublic: boolean }) =
   }
 
   return (
-    <>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        fitView={false}
-        minZoom={0.2}
-        maxZoom={2.5}
-        panOnDrag={true}
-        zoomOnScroll={true}
-        zoomOnPinch={true}
-        panOnScroll={false}
-        zoomOnDoubleClick={false}
-        preventScrolling={true}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        className="h-full w-full"
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background color="#d8cfbc" gap={18} size={1} />
-        
-        {/* Navigation & Zoom controls */}
-        <FlowControls
-          onCenterTree={handleCenterTree}
-          onCenterSelected={handleCenterSelected}
-          onResetView={handleResetView}
-          isNodeSelected={selectedNodeId !== null}
-        />
-
-        {/* MiniMap panel always visible */}
-        <MiniMap
-          position="bottom-left"
-          style={{
-            height: 110,
-            width: 150,
-            background: '#f7f4ef',
-            borderRadius: '12px',
-            border: '1px solid #e8e0d0',
-            boxShadow: '0 8px 24px rgba(35,51,38,0.12)',
-            margin: '0 0 16px 16px',
-          }}
-          maskColor="rgba(45, 106, 79, 0.08)"
-          nodeColor={(n) => (n.id === selectedNodeId ? '#2d6a4f' : '#8fae98')}
-          nodeStrokeColor="#c0d4c7"
-          nodeBorderRadius={4}
-          zoomable
-          pannable
-        />
-      </ReactFlow>
-
-      {/* Local tree search input */}
-      <div
-        className="absolute top-6 left-[340px] z-10 hidden md:flex items-center"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="relative shadow-md rounded-xl bg-white/95 border border-[#e8e0d0]">
-          <SearchIcon size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#a09080]" />
-          <input
-            type="text"
-            placeholder="Find a relative..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => setIsSearchFocused(true)}
-            className="h-12 pl-10 pr-9 w-60 rounded-xl text-xs outline-none font-semibold text-[#2d3a2a] transition-all focus:border-[#2d6a4f]"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a09080] hover:text-[#5a4a3a]"
+    <div
+      className="flex flex-col h-full w-full overflow-hidden"
+      style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
+    >
+      {/* Unified Top Header Panel */}
+      <div className="flex-shrink-0 bg-white border-b border-[#e8e0d0] px-4 py-3 md:py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between z-20 shadow-sm">
+        {/* Left: Back Button & Tree Info */}
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={() => navigate(isPublic ? '/' : '/dashboard')}
+            className="cursor-pointer rounded-xl bg-[#f7f4ef] p-2.5 transition-all hover:bg-[#e8e0d0]"
+            style={{ border: '1px solid #e8e0d0', color: '#5a4a3a' }}
+            title={isPublic ? 'Back to Home' : 'Back to Dashboard'}
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div className="min-w-0">
+            <h1
+              className="text-base sm:text-lg font-bold leading-tight text-[#1a3a2a] truncate"
+              style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
             >
-              <X size={14} />
-            </button>
+              {tree?.name || 'Family Tree'}
+            </h1>
+            <p
+              className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[#a09080]"
+            >
+              Interactive Family Graph
+            </p>
+          </div>
+        </div>
+
+        {/* Center/Right-ish: Responsive Local Search Input */}
+        <div
+          className="relative flex items-center w-full sm:w-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="relative shadow-sm rounded-xl bg-[#f7f4ef] border border-[#e8e0d0] w-full sm:w-60 md:w-72">
+            <SearchIcon size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#a09080]" />
+            <input
+              type="text"
+              placeholder="Find a relative..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              className="h-10 pl-10 pr-9 w-full rounded-xl text-xs outline-none font-semibold text-[#2d3a2a] transition-all bg-transparent focus:border-[#2d6a4f]"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a09080] hover:text-[#5a4a3a]"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Results Autocomplete dropdown */}
+          {isSearchFocused && searchResults.length > 0 && (
+            <div
+              className="absolute top-12 left-0 w-full sm:w-72 max-h-72 overflow-y-auto rounded-xl bg-white shadow-xl py-2 z-30 border border-[#e8e0d0]"
+            >
+              {searchResults.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    handleSearchSelect(p);
+                    setIsSearchFocused(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2 hover:bg-[#f7f4ef] text-left transition-colors cursor-pointer"
+                >
+                  <div
+                    className={`h-8 w-8 overflow-hidden rounded-md flex-shrink-0 ${p.deathDate ? 'grayscale opacity-75' : ''}`}
+                    style={{ background: '#f7f4ef', border: '1px solid #e8e0d0' }}
+                  >
+                    <DecompressedImage photoUrl={p.photoUrl} fallbackIconSize={14} className="h-full w-full object-cover" />
+                  </div>
+                  <div className="truncate">
+                    <p className="text-xs font-bold text-[#2d3a2a] truncate">{p.firstName} {p.lastName}</p>
+                    <p className="text-[9px] font-semibold text-[#a09080]">
+                      {getYear(p.birthDate)} - {p.deathDate ? getYear(p.deathDate) : 'Present'}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* No results message */}
+          {isSearchFocused && searchQuery.trim() && searchResults.length === 0 && (
+            <div
+              className="absolute top-12 left-0 w-full sm:w-72 rounded-xl bg-white shadow-xl px-4 py-3 z-30 border border-[#e8e0d0] text-center text-xs text-[#a09080]"
+            >
+              No family members found
+            </div>
           )}
         </div>
 
-        {/* Results Autocomplete dropdown */}
-        {isSearchFocused && searchResults.length > 0 && (
-          <div
-            className="absolute top-14 left-0 w-72 max-h-72 overflow-y-auto rounded-xl bg-white shadow-xl py-2 z-30 border border-[#e8e0d0]"
-          >
-            {searchResults.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => {
-                  handleSearchSelect(p);
-                  setIsSearchFocused(false);
-                }}
-                className="w-full flex items-center gap-3 px-4 py-2 hover:bg-[#f7f4ef] text-left transition-colors cursor-pointer"
-              >
-                <div
-                  className={`h-8 w-8 overflow-hidden rounded-md flex-shrink-0 ${p.deathDate ? 'grayscale opacity-75' : ''}`}
-                  style={{ background: '#f7f4ef', border: '1px solid #e8e0d0' }}
-                >
-                  <DecompressedImage photoUrl={p.photoUrl} fallbackIconSize={14} className="h-full w-full object-cover" />
-                </div>
-                <div className="truncate">
-                  <p className="text-xs font-bold text-[#2d3a2a] truncate">{p.firstName} {p.lastName}</p>
-                  <p className="text-[9px] font-semibold text-[#a09080]">
-                    {getYear(p.birthDate)} - {p.deathDate ? getYear(p.deathDate) : 'Present'}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* No results message */}
-        {isSearchFocused && searchQuery.trim() && searchResults.length === 0 && (
-          <div
-            className="absolute top-14 left-0 w-72 rounded-xl bg-white shadow-xl px-4 py-3 z-30 border border-[#e8e0d0] text-center text-xs text-[#a09080]"
-          >
-            No family members found
+        {/* Right: Add Person Button */}
+        {!isPublic && (
+          <div className="flex-shrink-0 w-full sm:w-auto">
+            <Link
+              to={`/trees/${treeId}/persons/new`}
+              className="flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5 w-full sm:w-auto"
+              style={{ background: '#1a3a2a' }}
+            >
+              <Plus size={16} />
+              <span>Add Person</span>
+            </Link>
           </div>
         )}
       </div>
 
-      {/* Instruction tooltip at the bottom */}
-      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 pointer-events-none z-10 hidden sm:block">
-        <div className="bg-[#1a3a2a]/90 backdrop-blur-sm text-white text-[11px] px-4 py-2 rounded-full flex items-center justify-center gap-x-3 shadow-lg border border-[#3f9372]/30 font-medium">
-          <span>🖱️ Drag to pan</span>
-          <span className="w-1.5 h-1.5 bg-white/40 rounded-full" />
-          <span>🔍 Scroll to zoom</span>
-          <span className="w-1.5 h-1.5 bg-white/40 rounded-full" />
-          <span>👈 Click to focus</span>
-          <span className="w-1.5 h-1.5 bg-white/40 rounded-full" />
-          <span>⚡ Double-click for Profile</span>
+      {/* Main Canvas Area */}
+      <div className="flex-1 relative w-full h-full bg-[#f7f4ef]">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          fitView={false}
+          minZoom={0.2}
+          maxZoom={2.5}
+          panOnDrag={true}
+          zoomOnScroll={true}
+          zoomOnPinch={true}
+          panOnScroll={false}
+          zoomOnDoubleClick={false}
+          preventScrolling={true}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          className="h-full w-full"
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background color="#d8cfbc" gap={18} size={1} />
+          
+          {/* Navigation & Zoom controls */}
+          <FlowControls
+            onCenterTree={handleCenterTree}
+            onCenterSelected={handleCenterSelected}
+            onResetView={handleResetView}
+            isNodeSelected={selectedNodeId !== null}
+          />
+
+          {/* MiniMap panel always visible, hidden on mobile */}
+          <MiniMap
+            position="bottom-left"
+            className="hidden sm:block"
+            style={{
+              height: 110,
+              width: 150,
+              background: '#f7f4ef',
+              borderRadius: '12px',
+              border: '1px solid #e8e0d0',
+              boxShadow: '0 8px 24px rgba(35,51,38,0.12)',
+              margin: '0 0 16px 16px',
+            }}
+            maskColor="rgba(45, 106, 79, 0.08)"
+            nodeColor={(n) => (n.id === selectedNodeId ? '#2d6a4f' : '#8fae98')}
+            nodeStrokeColor="#c0d4c7"
+            nodeBorderRadius={4}
+            zoomable
+            pannable
+          />
+        </ReactFlow>
+
+        {/* Instruction tooltip at the bottom */}
+        <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 pointer-events-none z-10 hidden sm:block">
+          <div className="bg-[#1a3a2a]/90 backdrop-blur-sm text-white text-[11px] px-4 py-2 rounded-full flex items-center justify-center gap-x-3 shadow-lg border border-[#3f9372]/30 font-medium">
+            <span>🖱️ Drag to pan</span>
+            <span className="w-1.5 h-1.5 bg-white/40 rounded-full" />
+            <span>🔍 Scroll to zoom</span>
+            <span className="w-1.5 h-1.5 bg-white/40 rounded-full" />
+            <span>👈 Click to focus</span>
+            <span className="w-1.5 h-1.5 bg-white/40 rounded-full" />
+            <span>⚡ Double-click for Profile</span>
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 const TreeView: React.FC = () => {
   const { treeId } = useParams();
-  const navigate = useNavigate();
   const isPublic = window.location.pathname.startsWith('/public-trees');
-
-  const { useGet: useTreeGet } = useTrees();
-  const { data: tree } = useTreeGet(Number(treeId), isPublic);
 
   if (!treeId) {
     return <div>Invalid tree ID</div>;
@@ -1051,49 +1122,6 @@ const TreeView: React.FC = () => {
       className="relative h-[calc(100vh-64px)] bg-[#f7f4ef] md:h-screen overflow-hidden"
       style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
     >
-      {/* Toolbar */}
-      <div className="absolute top-6 left-6 z-10 flex items-center gap-4 pointer-events-auto">
-        <button
-          onClick={() => navigate(isPublic ? '/' : '/dashboard')}
-          className="cursor-pointer rounded-xl bg-white p-3 shadow-md transition-all hover:shadow-lg"
-          style={{ border: '1px solid #e8e0d0', color: '#5a4a3a' }}
-          title={isPublic ? 'Back to Home' : 'Back to Dashboard'}
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <div
-          className="rounded-xl bg-white/90 px-5 py-3 shadow-md backdrop-blur-md"
-          style={{ border: '1px solid #e8e0d0' }}
-        >
-          <h1
-            className="text-lg font-bold leading-none"
-            style={{ color: '#1a3a2a', fontFamily: "'Playfair Display', Georgia, serif" }}
-          >
-            {tree?.name || 'Family Tree'}
-          </h1>
-          <p
-            className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
-            style={{ color: '#a09080' }}
-          >
-            Interactive Family Graph
-          </p>
-        </div>
-      </div>
-
-      {/* Add Person */}
-      {!isPublic && (
-        <div className="absolute top-6 right-6 z-10 pointer-events-auto">
-          <Link
-            to={`/trees/${treeId}/persons/new`}
-            className="flex items-center gap-2 rounded-xl px-6 py-3.5 text-sm font-bold text-white shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5"
-            style={{ background: '#1a3a2a' }}
-          >
-            <Plus size={18} />
-            <span>Add Person</span>
-          </Link>
-        </div>
-      )}
-
       <ReactFlowProvider>
         <TreeFlow treeId={Number(treeId)} isPublic={isPublic} />
       </ReactFlowProvider>

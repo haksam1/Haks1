@@ -174,8 +174,8 @@ public class PersonService {
 
         Person person = Person.builder()
                 .tree(tree)
-                .firstName(req.getFirstName())
-                .lastName(req.getLastName())
+                .firstName(req.getFirstName().trim())
+                .lastName(req.getLastName().trim())
                 .birthDate(req.getBirthDate())
                 .deathDate(req.getDeathDate())
                 .gender(req.getGender())
@@ -188,136 +188,89 @@ public class PersonService {
                 .build();
         Person saved = personRepository.save(person);
 
-        String relType = req.getRelationshipType();
-        Long relPersonId = req.getRelatedPersonId();
+        boolean isRootAncestor = existing.isEmpty();
 
-        if (relType != null && !relType.trim().isEmpty() && relPersonId != null) {
-            Person targetPerson = personRepository.findById(relPersonId)
+        if (!isRootAncestor && req.getRelatedPersonId() != null) {
+            Long relatedId = req.getRelatedPersonId();
+            Person relatedPerson = personRepository.findByIdAndTreeId(relatedId, treeId)
                     .orElseThrow(() -> new ResourceNotFoundException("Related person not found"));
-            boolean isParent = isParentRelationship(relType);
-            boolean isGrandparent = isGrandparentRelationship(relType);
-            boolean isAlive = req.getAlive() != null ? req.getAlive() : (req.getDeathDate() == null);
 
-            if (isParent) {
+            String relType = req.getRelationshipType();
+            if (relType == null || relType.trim().isEmpty()) {
+                relType = "CHILD"; // Default fallback
+            }
+
+            if ("SPOUSE".equalsIgnoreCase(relType)) {
+                // Link the new person as a spouse to the chosen member
                 RelationshipRequest relReq = new RelationshipRequest();
-                relReq.setRelatedPersonId(relPersonId);
-                relReq.setType(relType);
+                relReq.setRelatedPersonId(relatedPerson.getId());
+                relReq.setType("SPOUSE");
                 addRelationship(treeId, saved.getId(), relReq, userId);
 
-                if (isAlive) {
+                // Spouse credential logic: if alive, send credentials
+                boolean isAlive = req.getAlive() != null ? req.getAlive() : (req.getDeathDate() == null);
+                if (isAlive && req.getEmail() != null && !req.getEmail().isBlank()) {
                     sendCredentials(tree, saved, req.getEmail());
-                } else {
-                    if (req.getChildFirstName() != null && !req.getChildFirstName().trim().isEmpty()) {
-                        Person child = Person.builder()
-                                .tree(tree)
-                                .firstName(req.getChildFirstName())
-                                .lastName(req.getChildLastName())
-                                .birthDate(req.getChildBirthDate())
-                                .gender(req.getChildGender())
-                                .phoneNumber(req.getChildPhoneNumber())
-                                .email(req.getChildEmail())
-                                .createdBy(userId)
-                                .modifyPermission("SELF_AND_ADMIN")
-                                .build();
-                        Person savedChild = personRepository.save(child);
-
-                        RelationshipRequest relChildReq = new RelationshipRequest();
-                        relChildReq.setRelatedPersonId(savedChild.getId());
-                        relChildReq.setType("CHILD");
-                        addRelationship(treeId, saved.getId(), relChildReq, userId);
-
-                        RelationshipRequest sibReq = new RelationshipRequest();
-                        sibReq.setRelatedPersonId(targetPerson.getId());
-                        sibReq.setType("SIBLING");
-                        addRelationship(treeId, savedChild.getId(), sibReq, userId);
-
-                        sendCredentials(tree, savedChild, req.getChildEmail());
-                    }
-                }
-            } else if (isGrandparent) {
-                boolean isPaternal = relType.toUpperCase().contains("PATERNAL") || relType.equalsIgnoreCase("GRANDFATHER") || relType.equalsIgnoreCase("GRANDMOTHER");
-                
-                Person parentNode = null;
-                String parentGender = isPaternal ? "MALE" : "FEMALE";
-                
-                for (Relationship rel : targetPerson.getRelationships()) {
-                    if (rel.getType() == Relationship.RelationshipType.PARENT) {
-                        Person p = rel.getRelatedPerson();
-                        if (parentGender.equalsIgnoreCase(p.getGender())) {
-                            parentNode = p;
-                            break;
-                        }
-                    }
-                }
-                
-                if (parentNode == null) {
-                    String defaultLastName = targetPerson.getLastName();
-                    String defaultFirstName = (isPaternal ? "Father" : "Mother") + " of " + targetPerson.getFirstName();
-                    LocalDate birthDate = targetPerson.getBirthDate() != null ? targetPerson.getBirthDate().minusYears(25) : LocalDate.of(1970, 1, 1);
-                    
-                    Person placeholder = Person.builder()
-                            .tree(tree)
-                            .firstName(defaultFirstName)
-                            .lastName(defaultLastName)
-                            .birthDate(birthDate)
-                            .gender(parentGender)
-                            .bio("Placeholder profile for " + (isPaternal ? "Father" : "Mother"))
-                            .createdBy(userId)
-                            .modifyPermission("SELF_AND_ADMIN")
-                            .build();
-                    parentNode = personRepository.save(placeholder);
-                    
-                    RelationshipRequest relReq = new RelationshipRequest();
-                    relReq.setRelatedPersonId(parentNode.getId());
-                    relReq.setType(isPaternal ? "FATHER" : "MOTHER");
-                    addRelationship(treeId, targetPerson.getId(), relReq, userId);
-                }
-
-                RelationshipRequest gpRelReq = new RelationshipRequest();
-                gpRelReq.setRelatedPersonId(parentNode.getId());
-                gpRelReq.setType(relType.toUpperCase().contains("GRANDMOTHER") ? "MOTHER" : "FATHER");
-                addRelationship(treeId, saved.getId(), gpRelReq, userId);
-
-                if (isAlive) {
-                    sendCredentials(tree, saved, req.getEmail());
-                } else {
-                    if (req.getChildFirstName() != null && !req.getChildFirstName().trim().isEmpty()) {
-                        Person child = Person.builder()
-                                .tree(tree)
-                                .firstName(req.getChildFirstName())
-                                .lastName(req.getChildLastName())
-                                .birthDate(req.getChildBirthDate())
-                                .gender(req.getChildGender())
-                                .phoneNumber(req.getChildPhoneNumber())
-                                .email(req.getChildEmail())
-                                .createdBy(userId)
-                                .modifyPermission("SELF_AND_ADMIN")
-                                .build();
-                        Person savedChild = personRepository.save(child);
-
-                        RelationshipRequest relChildReq = new RelationshipRequest();
-                        relChildReq.setRelatedPersonId(savedChild.getId());
-                        relChildReq.setType("CHILD");
-                        addRelationship(treeId, saved.getId(), relChildReq, userId);
-
-                        if (parentGender.equalsIgnoreCase(savedChild.getGender())) {
-                            RelationshipRequest parentRelReq = new RelationshipRequest();
-                            parentRelReq.setRelatedPersonId(savedChild.getId());
-                            parentRelReq.setType(isPaternal ? "FATHER" : "MOTHER");
-                            addRelationship(treeId, targetPerson.getId(), parentRelReq, userId);
-                        }
-
-                        sendCredentials(tree, savedChild, req.getChildEmail());
-                    }
                 }
             } else {
+                // Link the new person as a child to the chosen parent
                 RelationshipRequest relReq = new RelationshipRequest();
-                relReq.setRelatedPersonId(relPersonId);
-                relReq.setType(relType);
+                relReq.setRelatedPersonId(relatedPerson.getId());
+                relReq.setType("CHILD");
                 addRelationship(treeId, saved.getId(), relReq, userId);
+
+                // Link to second parent if specified
+                if (req.getSecondParentId() != null) {
+                    RelationshipRequest secondParentRelReq = new RelationshipRequest();
+                    secondParentRelReq.setRelatedPersonId(req.getSecondParentId());
+                    secondParentRelReq.setType("CHILD");
+                    addRelationship(treeId, saved.getId(), secondParentRelReq, userId);
+                }
+
+                // Credential logic
+                boolean isAlive = req.getAlive() != null ? req.getAlive() : (req.getDeathDate() == null);
+                if (isAlive) {
+                    // If alive, check if this child already has children (confirmed as a parent)
+                    // If isParent is null, fallback to sending credentials (compatibility for tests)
+                    if (req.getIsParent() == null || Boolean.TRUE.equals(req.getIsParent())) {
+                        if (req.getEmail() != null && !req.getEmail().isBlank()) {
+                            sendCredentials(tree, saved, req.getEmail());
+                        }
+                    }
+                } else {
+                    // If deceased, family head selects/adds one of their living children to receive credentials instead
+                    if (req.getChildFirstName() != null && !req.getChildFirstName().trim().isEmpty()) {
+                        Person child = Person.builder()
+                                .tree(tree)
+                                .firstName(req.getChildFirstName().trim())
+                                .lastName(req.getChildLastName().trim())
+                                .birthDate(req.getChildBirthDate())
+                                .gender(req.getChildGender())
+                                .phoneNumber(req.getChildPhoneNumber())
+                                .email(req.getChildEmail())
+                                .createdBy(userId)
+                                .modifyPermission("SELF_AND_ADMIN")
+                                .build();
+                        Person savedChild = personRepository.save(child);
+
+                        // Link the living child to the deceased parent
+                        RelationshipRequest relChildReq = new RelationshipRequest();
+                        relChildReq.setRelatedPersonId(savedChild.getId());
+                        relChildReq.setType("CHILD");
+                        addRelationship(treeId, saved.getId(), relChildReq, userId);
+
+                        // Give credentials to the living child
+                        if (req.getChildEmail() != null && !req.getChildEmail().isBlank()) {
+                            sendCredentials(tree, savedChild, req.getChildEmail());
+                        }
+                    }
+                }
             }
         } else {
-            if (req.getEmail() != null && !req.getEmail().isBlank()) {
+            // First person ever created: root ancestor. No parent.
+            // OR no related parent was provided (legacy/test support)
+            boolean isAlive = req.getAlive() != null ? req.getAlive() : (req.getDeathDate() == null);
+            if (isAlive && req.getEmail() != null && !req.getEmail().isBlank()) {
                 sendCredentials(tree, saved, req.getEmail());
             }
         }
@@ -725,12 +678,22 @@ public class PersonService {
         java.util.Map<Long, String> relationLabels = new java.util.HashMap<>();
 
         // 1. Spouses
-        java.util.Set<Long> spouses = spousesMap.getOrDefault(activeId, java.util.Collections.emptySet());
-        for (Long id : spouses) {
+        java.util.List<Long> sortedSpouseIds = new java.util.ArrayList<>(spousesMap.getOrDefault(activeId, java.util.Collections.emptySet()));
+        java.util.Collections.sort(sortedSpouseIds); // Sort by Person ID to make it deterministic and stable
+        
+        int spouseIndex = 1;
+        for (Long id : sortedSpouseIds) {
             Person p = personMap.get(id);
             if (p != null) {
                 String gender = p.getGender();
-                String label = "FEMALE".equalsIgnoreCase(gender) ? "Wife" : "MALE".equalsIgnoreCase(gender) ? "Husband" : "Spouse";
+                String baseLabel = "FEMALE".equalsIgnoreCase(gender) ? "Wife" : "MALE".equalsIgnoreCase(gender) ? "Husband" : "Spouse";
+                String label;
+                if (sortedSpouseIds.size() > 1) {
+                    label = baseLabel + " number " + getWordNumber(spouseIndex);
+                    spouseIndex++;
+                } else {
+                    label = baseLabel;
+                }
                 relationLabels.put(id, label);
             }
         }
@@ -878,30 +841,20 @@ public class PersonService {
             }
 
             // 2. Link spouses to the same family or create a combined family record if needed
-            java.util.Set<Family> pFamilies = new java.util.HashSet<>(person.getFamilies());
-            java.util.Set<Family> rFamilies = new java.util.HashSet<>(relatedPerson.getFamilies());
-
-            if (pFamilies.isEmpty() && rFamilies.isEmpty()) {
-                // Create new combined family
-                String famName = getFamilyName(person, relatedPerson);
-                Family family = familyRepository.save(Family.builder().name(famName).build());
-                person.getFamilies().add(family);
-                relatedPerson.getFamilies().add(family);
-            } else if (!pFamilies.isEmpty() && rFamilies.isEmpty()) {
-                // Link relatedPerson to person's families
-                relatedPerson.getFamilies().addAll(pFamilies);
-            } else if (pFamilies.isEmpty() && !rFamilies.isEmpty()) {
-                // Link person to relatedPerson's families
-                person.getFamilies().addAll(rFamilies);
-            } else {
-                // Both have families. Create a combined family record and link both to it,
-                // and link both to each other's existing families as well to unify them
+            // To support multiple spouses distinctively, we always create a new combined family for this marriage
+            // and link both spouses to it, without merging their other/prior families from different marriages.
+            boolean alreadyLinked = false;
+            for (Family f : person.getFamilies()) {
+                if (relatedPerson.getFamilies().contains(f)) {
+                    alreadyLinked = true;
+                    break;
+                }
+            }
+            if (!alreadyLinked) {
                 String famName = getFamilyName(person, relatedPerson);
                 Family combined = familyRepository.save(Family.builder().name(famName).build());
                 person.getFamilies().add(combined);
                 relatedPerson.getFamilies().add(combined);
-                person.getFamilies().addAll(rFamilies);
-                relatedPerson.getFamilies().addAll(pFamilies);
             }
 
             personRepository.save(person);
@@ -966,5 +919,21 @@ public class PersonService {
         if (ln1.isEmpty()) return ln2 + " Family";
         if (ln2.isEmpty()) return ln1 + " Family";
         return ln1 + " & " + ln2 + " Family";
+    }
+
+    private String getWordNumber(int index) {
+        switch (index) {
+            case 1: return "one";
+            case 2: return "two";
+            case 3: return "three";
+            case 4: return "four";
+            case 5: return "five";
+            case 6: return "six";
+            case 7: return "seven";
+            case 8: return "eight";
+            case 9: return "nine";
+            case 10: return "ten";
+            default: return String.valueOf(index);
+        }
     }
 }

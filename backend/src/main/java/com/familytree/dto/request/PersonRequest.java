@@ -27,7 +27,9 @@ public class PersonRequest {
     // Refactored fields
     private String relationshipType;
     private Long relatedPersonId;
+    private Long secondParentId;
     private Boolean alive;
+    private Boolean isParent;
 
     // Living child details
     private String childFirstName;
